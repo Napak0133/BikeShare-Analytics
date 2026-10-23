@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}BikeShare Analytics{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🚲 BikeShare Analytics</div>
+  <nav>
+    <a href="/" class="{{ 'active' if active=='dashboard' }}" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="/data" class="{{ 'active' if active=='data' }}" data-i18n="nav_data">Data Management</a>
+    <a href="/analysis" class="{{ 'active' if active=='analysis' }}" data-i18n="nav_analysis">Analysis Results</a>
+    <a href="/status" class="{{ 'active' if active=='status' }}" data-i18n="nav_status">Update Status</a>
+    <span class="lang-switch">
+      <button class="lang-btn" data-lang="th" onclick="setLang('th')">TH</button>
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+    </span>
+  </nav>
+</header>
+<main class="content {% block main_class %}{% endblock %}">
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer" data-i18n="footer">
+  BikeShare Analytics — Bike Sharing Dataset, Washington D.C. 2011–2012 (UCI ML Repository)
+</footer>
+<script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

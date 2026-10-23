@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Add / Edit Data — BikeShare Analytics{% endblock %}
+{% block content %}
+<h1 id="pageTitle"></h1>
+<p class="muted" data-i18n="add_sub">All values are entered in everyday units; the system converts them to the normalized format used in Excel automatically.</p>
+
+<div id="alertBox"></div>
+
+<div class="card">
+  <form id="recordForm">
+    <div class="form-grid">
+      <div class="field"><label data-i18n="lbl_date">Date</label><input type="date" id="dteday" required></div>
+      <div class="field"><label data-i18n="lbl_hour">Hour (0–23)</label><input type="number" id="hr" min="0" max="23" step="1" required data-i18n-ph="ph_hr"></div>
+      <div class="field"><label data-i18n="lbl_season">Season</label>
+        <select id="season" required>
+          <option value="1" data-i18n="f_spring">Spring</option><option value="2" data-i18n="f_summer">Summer</option>
+          <option value="3" data-i18n="f_fall">Fall</option><option value="4" data-i18n="f_winter">Winter</option>
+        </select></div>
+      <div class="field"><label data-i18n="lbl_holiday">Holiday</label>
+        <select id="holiday"><option value="0" data-i18n="opt_no">No</option><option value="1" data-i18n="opt_yes">Yes</option></select></div>
+      <div class="field"><label data-i18n="lbl_workingday">Working Day</label>
+        <select id="workingday"><option value="1" data-i18n="opt_yes">Yes</option><option value="0" data-i18n="opt_no">No</option></select></div>
+      <div class="field"><label data-i18n="lbl_weathersit">Weather Situation</label>
+        <select id="weathersit" required>
+          <option value="1" data-i18n="f_clear">Clear</option><option value="2" data-i18n="f_mist">Mist / Cloudy</option>
+          <option value="3" data-i18n="f_rain">Light Rain / Snow</option><option value="4" data-i18n="f_severe">Severe Weather</option>
+        </select></div>
+      <div class="field"><label data-i18n="lbl_temp">Temperature (°C)</label><input type="number" step="0.1" min="0" max="41" id="temp_c" required data-i18n-ph="ph_temp"></div>
+      <div class="field"><label data-i18n="lbl_atemp">Feeling Temperature (°C)</label><input type="number" step="0.1" min="0" max="50" id="atemp_c" required data-i18n-ph="ph_atemp"></div>
+      <div class="field"><label data-i18n="lbl_hum">Humidity (%)</label><input type="number" step="0.1" min="0" max="100" id="hum_pct" required data-i18n-ph="ph_hum"></div>
+      <div class="field"><label data-i18n="lbl_wind">Wind Speed</label><input type="number" step="0.01" min="0" max="67" id="windspeed_val" required data-i18n-ph="ph_wind"></div>
+      <div class="field"><label data-i18n="lbl_casual">Casual Users</label><input type="number" min="0" max="1000" step="1" id="casual" required data-i18n-ph="ph_casual"></div>
+      <div class="field"><label data-i18n="lbl_registered">Registered Users</label><input type="number" min="0" max="1000" step="1" id="registered" required data-i18n-ph="ph_registered"></div>
+      <div class="field computed"><label data-i18n="lbl_total_auto">Total Rentals (auto-calculated)</label><input type="text" id="cntPreview" readonly value="0"></div>
+    </div>
+
+    <div style="margin-top:20px; display:flex; gap:10px;">
+      <button type="submit" class="btn secondary" id="submitBtn" data-i18n="btn_save">Save Record</button>
+      <a href="/data" class="btn outline" data-i18n="btn_cancel">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const editId = {{ (edit_id | tojson) if edit_id else "null" }};
+
+// field -> [min, max]
+const LIMITS = {
+  hr: [0, 23], temp_c: [0, 41], atemp_c: [0, 50], hum_pct: [0, 100],
+  windspeed_val: [0, 67], casual: [0, 1000], registered: [0, 1000],
+};
+Object.entries(LIMITS).forEach(([id, [min, max]]) => {
+  const el = document.getElementById(id);
+  el.addEventListener("input", () => {
+    if (el.value === "" || el.value === "-") return;
+    let v = parseFloat(el.value);
+    if (isNaN(v)) return;
+    if (v > max) el.value = max;
+    else if (v < min) el.value = min;
+  });
+});
+
+function recalcTotal() {
+  const c = parseInt(document.getElementById("casual").value || 0);
+  const r = parseInt(document.getElementById("registered").value || 0);
+  document.getElementById("cntPreview").value = c + r;
+}
+document.getElementById("casual").addEventListener("input", recalcTotal);
+document.getElementById("registered").addEventListener("input", recalcTotal);
+
+function weekdayFromDate(dateStr) {
+  return new Date(dateStr + "T00:00:00").getDay();
+}
+
+function setPageTitle() {
+  document.getElementById("pageTitle").textContent = editId ? t("add_title_edit", { id: editId }) : t("add_title_new");
+}
+
+async function loadForEdit() {
+  setPageTitle();
+  if (!editId) return;
+  const r = await apiGet(`/api/records/${editId}?source=web`);
+  document.getElementById("dteday").value = r.dteday;
+  document.getElementById("hr").value = r.hr;
+  document.getElementById("season").value = r.season;
+  document.getElementById("holiday").value = r.holiday;
+  document.getElementById("workingday").value = r.workingday;
+  document.getElementById("weathersit").value = r.weathersit;
+  document.getElementById("temp_c").value = (r.temp * 41).toFixed(1);
+  document.getElementById("atemp_c").value = (r.atemp * 50).toFixed(1);
+  document.getElementById("hum_pct").value = (r.hum * 100).toFixed(1);
+  document.getElementById("windspeed_val").value = (r.windspeed * 67).toFixed(2);
+  document.getElementById("casual").value = r.casual;
+  document.getElementById("registered").value = r.registered;
+  recalcTotal();
+}
+
+document.getElementById("recordForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const dteday = document.getElementById("dteday").value;
+  const payload = {
+    dteday,
+    hr: parseInt(document.getElementById("hr").value),
+    season: parseInt(document.getElementById("season").value),
+    yr: new Date(dteday).getFullYear() - 2011,
+    mnth: new Date(dteday + "T00:00:00").getMonth() + 1,
+    weekday: weekdayFromDate(dteday),
+    holiday: parseInt(document.getElementById("holiday").value),
+    workingday: parseInt(document.getElementById("workingday").value),
+    weathersit: parseInt(document.getElementById("weathersit").value),
+    temp_c: parseFloat(document.getElementById("temp_c").value),
+    atemp_c: parseFloat(document.getElementById("atemp_c").value),
+    hum_pct: parseFloat(document.getElementById("hum_pct").value),
+    windspeed_val: parseFloat(document.getElementById("windspeed_val").value),
+    casual: parseInt(document.getElementById("casual").value),
+    registered: parseInt(document.getElementById("registered").value),
+  };
+  try {
+    if (editId) {
+      await apiSend(`/api/records/${editId}`, "PUT", payload);
+      showAlert(t("msg_updated"), "success");
+    } else {
+      await apiSend("/api/records", "POST", payload);
+      showAlert(t("msg_added"), "success");
+      document.getElementById("recordForm").reset();
+      recalcTotal();
+    }
+  } catch (err) {
+    showAlert(err.message, "error");
+  }
+});
+
+function showAlert(msg, type) {
+  document.getElementById("alertBox").innerHTML = `<div class="alert ${type}">${msg}</div>`;
+}
+
+document.addEventListener("i18n:changed", setPageTitle);
+loadForEdit();
+</script>
+{% endblock %}

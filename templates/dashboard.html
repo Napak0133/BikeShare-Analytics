@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — BikeShare Analytics{% endblock %}
+{% block main_class %}full-width{% endblock %}
+{% block content %}
+<div style="max-width:1600px;margin:0 auto">
+<div>
+  <h1 data-i18n="dash_title">Dashboard</h1>
+  <p class="muted" data-i18n="dash_sub">Overview of bike-sharing rentals, powered by the Tableau dashboard below.</p>
+</div>
+
+<div class="card" style="font-size:.86rem; border-left: 4px solid var(--brown)">
+  <strong data-i18n="tableau_refresh_title">About dashboard updates</strong>
+  <ol class="muted" style="margin:8px 0 0;padding-left:20px;line-height:1.7">
+    <li data-i18n="tbl_how_1"></li>
+    <li data-i18n="tbl_how_2"></li>
+    <li data-i18n="tbl_how_3"></li>
+    <li data-i18n="tbl_how_4"></li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2 data-i18n="tbl_update_title">Update Tableau Charts</h2>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <strong style="font-size:.88rem" data-i18n="tbl_step2">2. Tableau Public dashboard URL:</strong>
+    <input type="url" id="tableauUrl" style="flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--border, #ccc);border-radius:6px;font:inherit"
+           data-i18n-ph="ph_tableau_url" placeholder="https://public.tableau.com/...">
+    <button class="btn secondary" id="btnUpdateCharts" data-i18n="btn_update_charts" data-i18n-title="tt_update_charts">Update Charts</button>
+  </div>
+  <div id="urlStatus" class="muted" style="font-size:.82rem;margin-top:8px"></div>
+</div>
+
+<div class="card tableau-card" style="background: var(--bg); border-color: var(--accent);">
+  <div id="vizHolder" style="width:100%">
+    <div id="vizWrap" style="margin:0 auto;overflow:hidden;position:relative">
+      <div id="vizContainer" style="transform-origin:top left"></div>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:12px;font-size:.8rem" data-i18n="tableau_switch_hint">
+    Use the tabs inside the dashboard above to switch between Overview, Time, Weather, What-if and Forecasting.
+  </p>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src='https://public.tableau.com/javascripts/api/tableau-2.min.js'></script>
+<script type='text/javascript'>
+let viz;
+
+// The published dashboards are fixed-size (1366 x 768 in the workbook). Tableau does not scale a
+// fixed-size dashboard inside its frame, so the frame is created at the dashboard's own size
+// (plus room for the Tableau toolbar) and the whole thing is scaled to the width of the page.
+const design = { w: 1366, h: 768 };
+const TOOLBAR_PX = 59;       // space Tableau reserves for its toolbar below the dashboard
+const MAX_SCALE = 2;         // upper limit when enlarging to fill a very wide page
+
+function layoutViz() {
+  const holder = document.getElementById("vizHolder");
+  const wrap = document.getElementById("vizWrap");
+  const container = document.getElementById("vizContainer");
+  const fullH = design.h + TOOLBAR_PX;
+  const availW = holder.clientWidth;
+  // Fill the full width of the card (enlarging or shrinking as needed); the page scrolls vertically.
+  const scale = Math.min(MAX_SCALE, availW / design.w);
+  container.style.width = design.w + "px";
+  container.style.height = fullH + "px";
+  container.style.transform = `scale(${scale})`;
+  wrap.style.width = Math.floor(design.w * scale) + "px";
+  wrap.style.height = Math.floor(fullH * scale) + "px";
+}
+
+// If Tableau reports a fixed size for the shown dashboard, use it instead of the defaults.
+function readDashboardSize() {
+  try {
+    const size = viz.getWorkbook().getActiveSheet().getSize();
+    const max = size && size.maxSize;
+    if (size && size.behavior === "exactly" && max && max.width && max.height) {
+      design.w = max.width; design.h = max.height;
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function setUrlStatus(text, isError) {
+  const el = document.getElementById("urlStatus");
+  el.textContent = text;
+  el.style.color = isError ? "var(--danger, #b83a3a)" : "";
+}
+
+// Tableau Public "share" links look like .../app/profile/<user>/viz/<Workbook>/<Sheet>;
+// the embedding API needs .../views/<Workbook>/<Sheet>. Other URLs are used unchanged.
+function toEmbedUrl(url) {
+  const m = url.match(/^(https?:\/\/[^\/]+)\/app\/profile\/[^\/]+\/viz\/([^\/?#]+)\/([^\/?#]+)/);
+  return m ? `${m[1]}/views/${m[2]}/${m[3]}` : url;
+}
+
+function loadViz(url) {
+  const container = document.getElementById("vizContainer");
+  if (viz) { try { viz.dispose(); } catch (e) {} viz = null; }
+  layoutViz();
+  const options = {
+    hideTabs: false, hideToolbar: false, device: "desktop",
+    width: design.w + "px", height: (design.h + TOOLBAR_PX) + "px",
+    onFirstInteractive: () => {
+      if (readDashboardSize()) { layoutViz(); try { viz.setFrameSize(design.w, design.h + TOOLBAR_PX); } catch (e) {} }
+    },
+  };
+  viz = new tableau.Viz(container, toEmbedUrl(url), options);
+  try {
+    viz.addEventListener(tableau.TableauEventName.TAB_SWITCH, () => {
+      if (readDashboardSize()) { layoutViz(); try { viz.setFrameSize(design.w, design.h + TOOLBAR_PX); } catch (e) {} }
+    });
+  } catch (e) {}
+}
+
+async function updateCharts() {
+  const input = document.getElementById("tableauUrl");
+  const btn = document.getElementById("btnUpdateCharts");
+  const url = input.value.trim();
+  btn.disabled = true;
+  try {
+    await apiSend("/api/tableau-url", "POST", { url });
+    loadViz(url);
+    setUrlStatus(t("tbl_status_loaded", { time: new Date().toLocaleTimeString() }), false);
+  } catch (e) {
+    setUrlStatus(t("tbl_status_error", { err: e.message }), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function initDashboard() {
+  let url;
+  try { url = (await apiGet("/api/tableau-url")).url; }
+  catch (e) { setUrlStatus(t("tbl_status_error", { err: e.message }), true); return; }
+  document.getElementById("tableauUrl").value = url;
+  loadViz(url);
+}
+
+document.getElementById("btnUpdateCharts").addEventListener("click", updateCharts);
+document.getElementById("tableauUrl").addEventListener("keydown", (e) => { if (e.key === "Enter") updateCharts(); });
+window.addEventListener("resize", layoutViz);
+layoutViz();
+initDashboard();
+</script>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Analysis Results — BikeShare Analytics{% endblock %}
+{% block content %}
+<div class="flex-between">
+  <h1 data-i18n="an_title">Analysis Results</h1>
+  <div>
+    <a class="btn outline" href="/export/latest" data-i18n="btn_export_latest" data-i18n-title="tt_export_latest">⬇ Export Latest Data</a>
+    <a class="btn secondary" href="/export/updated-workbook" data-i18n="btn_export_updated" data-i18n-title="tt_export_updated">⬇ Generate Updated Analysis Workbook</a>
+  </div>
+</div>
+<p class="muted" data-i18n="an_sub">Calculated from Excel-equivalent formulas over Raw_Data + Web_Entries combined. Recalculated automatically after every add/edit/delete.</p>
+
+<div class="card">
+  <h2 data-i18n="an_desc_title">Descriptive Statistics — Total Rentals (cnt)</h2>
+  <div class="section-explain" data-i18n="an_desc_explain"></div>
+  <div class="table-wrap"><table id="descTable"><tbody></tbody></table></div>
+</div>
+
+<div class="card">
+  <h2 data-i18n="an_corr_title">Correlation Analysis</h2>
+  <div class="section-explain" data-i18n="an_corr_explain"></div>
+  <div class="table-wrap"><table id="corrTable"><thead><tr><th data-i18n="th_relationship">Relationship</th><th data-i18n="th_corrvalue">Correlation (r)</th><th data-i18n="th_interpret">Interpretation</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="card">
+  <h2 data-i18n="an_reg_title">Regression Analysis — Rentals vs. Temperature</h2>
+  <div class="section-explain" data-i18n="an_reg_explain"></div>
+  <div id="regBox"></div>
+</div>
+
+<div class="chart-grid">
+  <div class="card"><h2 data-i18n="tab_time">Summary by Hour</h2>
+    <div class="table-wrap"><table id="tblHour"><thead><tr><th data-i18n="th_hr_full">Hour</th><th data-i18n="th_total_rentals">Total Rentals</th></tr></thead><tbody></tbody></table></div></div>
+  <div class="card"><h2 data-i18n="f_season">Summary by Season</h2>
+    <div class="table-wrap"><table id="tblSeason"><thead><tr><th data-i18n="f_season">Season</th><th data-i18n="th_total_rentals">Total Rentals</th></tr></thead><tbody></tbody></table></div></div>
+  <div class="card"><h2 data-i18n="f_weather">Summary by Weather</h2>
+    <div class="table-wrap"><table id="tblWeather"><thead><tr><th data-i18n="f_weather">Weather</th><th data-i18n="th_total_rentals">Total Rentals</th></tr></thead><tbody></tbody></table></div></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let analysisData = null;
+
+async function renderAnalysis() {
+  const a = analysisData || (analysisData = await apiGet("/api/analysis"));
+
+  const d = a.descriptive;
+  const descRows = [
+    [t("an_count"), fmtNumber(d.count)],
+    [t("an_mean"), d.mean], [t("an_median"), d.median], [t("an_mode"), d.mode],
+    [t("an_std"), d.std_dev], [t("an_var"), d.variance],
+    [t("an_min"), d.min], [t("an_max"), d.max], [t("an_total"), fmtNumber(d.total_rentals)],
+  ];
+  document.querySelector("#descTable tbody").innerHTML =
+    descRows.map(([k,v]) => `<tr><td>${k}</td><td><strong>${v}</strong></td></tr>`).join("");
+
+  const c = a.correlation;
+  const interpret = (v) => Math.abs(v) < 0.1 ? t("interp_negligible") : Math.abs(v) < 0.3 ? t("interp_weak") : Math.abs(v) < 0.5 ? t("interp_moderate") : t("interp_strong");
+  const corrRows = [
+    [t("rel_temp_cnt"), c.temp_cnt], [t("rel_hum_cnt"), c.hum_cnt],
+    [t("rel_wind_cnt"), c.windspeed_cnt], [t("rel_temp_hum"), c.temp_hum],
+  ];
+  document.querySelector("#corrTable tbody").innerHTML =
+    corrRows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td><td>${interpret(v)} (${v>0?t("interp_pos"):t("interp_neg")})</td></tr>`).join("");
+
+  const r = a.regression;
+  document.getElementById("regBox").innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi"><div class="label">${t("kpi_equation")}</div><div class="value" style="font-size:1rem">${r.equation}</div></div>
+      <div class="kpi accent"><div class="label">${t("kpi_rsq")}</div><div class="value">${r.r_squared}</div></div>
+      <div class="kpi"><div class="label">${t("kpi_r")}</div><div class="value">${r.r_value}</div></div>
+      <div class="kpi accent"><div class="label">${t("kpi_obs")}</div><div class="value">${fmtNumber(r.observations)}</div></div>
+    </div>`;
+
+  const rowsHtml = (pairs) => pairs.map(([k, v]) => `<tr><td>${k}</td><td><strong>${fmtNumber(v)}</strong></td></tr>`).join("");
+  document.querySelector("#tblHour tbody").innerHTML =
+    rowsHtml(Object.entries(a.pivot_hourly).map(([k, v]) => [k, v]));
+  document.querySelector("#tblSeason tbody").innerHTML =
+    rowsHtml(Object.entries(a.pivot_season).map(([k, v]) => [t(SEASON_KEYS[k]), v]));
+  document.querySelector("#tblWeather tbody").innerHTML =
+    rowsHtml(Object.entries(a.pivot_weather).map(([k, v]) => [t(WEATHER_KEYS[k]), v]));
+}
+const SEASON_KEYS = { 1: "f_spring", 2: "f_summer", 3: "f_fall", 4: "f_winter" };
+const WEATHER_KEYS = { 1: "f_clear", 2: "f_mist", 3: "f_rain", 4: "f_severe" };
+
+document.addEventListener("i18n:changed", renderAnalysis);
+renderAnalysis();
+</script>
+{% endblock %}

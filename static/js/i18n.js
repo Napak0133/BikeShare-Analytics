@@ -1,0 +1,214 @@
+// i18n.js — EN / TH translations shared across every page.
+// Usage: give an element data-i18n="key" (text content) or data-i18n-ph="key" (placeholder),
+// then call applyI18n() after the page's own content is rendered.
+
+const I18N = {
+  en: {
+    nav_dashboard: "Dashboard", nav_data: "Data Management", nav_add: "Add / Edit",
+    nav_analysis: "Analysis Results", nav_status: "Update Status",
+    footer: "BikeShare Analytics — Bike Sharing Dataset, Washington D.C. 2011–2012 (UCI ML Repository)",
+
+    dash_title: "Dashboard", dash_sub: "Overview of bike-sharing rentals, powered by the Tableau dashboard below.",
+    tab_overview: "Overview", tab_time: "Time", tab_weather: "Weather", tab_whatif: "What-if", tab_forecasting: "Forecasting",
+    tableau_placeholder: "Tableau dashboard \"{name}\" will render here once the publishing URL is connected.",
+    tableau_files_note: "The workbook files (Project_data_Analysis.twb) are included in this project at /static/tableau/ and ready to be connected as soon as publishing details are provided.",
+    tableau_download: "Download workbook (.twb)",
+    tableau_switch_hint: "Use the tabs inside the dashboard above to switch between Overview, Time, Weather, What-if and Forecasting.",
+    tableau_refresh_title: "About dashboard updates",
+    tbl_update_title: "Update Tableau Charts",
+    tbl_step2: "Tableau Public dashboard URL:",
+    btn_tableau_csv: "⬇ Export Data for Tableau (CSV)",
+    btn_tableau_xlsx: "⬇ Export Data for Tableau (Excel)",
+    tt_tableau_export: "Download all records currently in the database (original data + website entries) to use for updating the charts in Tableau Public.",
+    ph_tableau_url: "Paste the Tableau Public dashboard URL here",
+    btn_update_charts: "Update Charts",
+    tt_update_charts: "Save this URL and load the updated charts from it.",
+    tbl_status_loaded: "Charts loaded from the saved URL at {time}.",
+    tbl_status_error: "Could not update the charts: {err}",
+    tbl_how_1: "On the Data Management page, click Export Data for Tableau (CSV or Excel). The file contains every record currently in the database: the original data plus everything added, edited or deleted through the website.",
+    tbl_how_2: "Open your Tableau workbook, update its data source with the exported file, then update the charts and republish the workbook to Tableau Public.",
+    tbl_how_3: "Copy the updated Dashboard URL from Tableau Public and paste it into the URL box above.",
+    tbl_how_4: "Click Update Charts. The website saves the URL (it is kept when you reload or reopen the website) and displays the updated charts from it.",
+    th_hr_full: "Hour",
+    th_total_rentals: "Total Rentals",
+
+    data_title: "Data Management",
+    data_sub: "Records from Raw_Data (original) and Web_Entries (added via this website).",
+    btn_add: "+ Add Record",
+    f_source: "Source", f_source_all: "All", f_source_raw: "Raw_Data (original)", f_source_web: "Web_Entries (website)",
+    f_season: "Season", f_season_all: "All", f_spring: "Spring", f_summer: "Summer", f_fall: "Fall", f_winter: "Winter",
+    f_weather: "Weather", f_weather_all: "All", f_clear: "Clear", f_mist: "Mist / Cloudy", f_rain: "Light Rain / Snow", f_severe: "Severe Weather",
+    f_month: "Month", f_month_all: "All months", f_year: "Year", f_year_all: "All years",
+    btn_apply: "Apply Filters", btn_clear: "Clear",
+    th_id: "ID", th_source: "Source", th_date: "Date", th_hr: "Hr", th_season: "Season", th_weather: "Weather",
+    th_temp: "Temp (°C)", th_hum: "Humidity (%)", th_casual: "Casual", th_registered: "Registered", th_total: "Total", th_actions: "Actions",
+    tag_raw: "Original", tag_web: "Website",
+    btn_edit: "Edit", btn_delete: "Delete", lbl_protected: "Protected",
+    modal_delete_title: "Delete this record?",
+    modal_delete_body: "This cannot be undone. Only website-added records can be deleted; the original dataset is protected.",
+    btn_cancel: "Cancel", btn_confirm_delete: "Delete",
+    msg_deleted: "Record deleted and analysis updated.",
+    err_delete_protected: "Only records added through the website can be deleted.",
+
+    add_title_new: "Add New Record", add_title_edit: "Edit Record #{id}",
+    add_sub: "All values are entered in everyday units; the system converts them to the normalized format used in Excel automatically.",
+    lbl_date: "Date", lbl_hour: "Hour (0–23)", lbl_season: "Season", lbl_holiday: "Holiday",
+    lbl_workingday: "Working Day", lbl_weathersit: "Weather Situation",
+    lbl_temp: "Temperature (°C)", hint_temp: "Stored in Excel as temp = °C ÷ 41",
+    lbl_atemp: "Feeling Temperature (°C)", hint_atemp: "Stored in Excel as atemp = °C ÷ 50",
+    lbl_hum: "Humidity (%)", hint_hum: "Stored in Excel as hum = % ÷ 100",
+    lbl_wind: "Wind Speed", hint_wind: "Stored in Excel as windspeed = value ÷ 67",
+    lbl_casual: "Casual Users", lbl_registered: "Registered Users", lbl_total_auto: "Total Rentals (auto-calculated)",
+    opt_yes: "Yes", opt_no: "No",
+    ph_hr: "e.g. 14 (0–23 h)", ph_temp: "e.g. 22.5 °C", ph_atemp: "e.g. 24.0 °C",
+    ph_hum: "e.g. 65.0 %", ph_wind: "e.g. 12.50 km/h", ph_casual: "e.g. 15 riders", ph_registered: "e.g. 60 riders",
+    btn_save: "Save Record",
+    msg_added: "Record added. Analysis results have been recalculated.",
+    msg_updated: "Record updated. Analysis results have been recalculated.",
+
+    an_title: "Analysis Results",
+    an_sub: "Calculated from Excel-equivalent formulas over Raw_Data + Web_Entries combined. Recalculated automatically after every add/edit/delete.",
+    btn_export_latest: "⬇ Export Latest Data", btn_export_updated: "⬇ Generate Updated Analysis Workbook",
+    an_desc_title: "Descriptive Statistics — Total Rentals (cnt)",
+    an_desc_explain: "Summarizes the overall distribution of hourly rental counts: central tendency (mean/median/mode) and spread (standard deviation, variance).",
+    an_count: "Record Count", an_mean: "Mean", an_median: "Median", an_mode: "Mode",
+    an_std: "Standard Deviation", an_var: "Sample Variance", an_min: "Minimum", an_max: "Maximum", an_total: "Total Rentals",
+    an_corr_title: "Correlation Analysis",
+    an_corr_explain: "Pearson correlation between weather factors and total rentals. Values range from -1 (strong negative) to +1 (strong positive); correlation does not prove causation.",
+    th_relationship: "Relationship", th_corrvalue: "Correlation (r)", th_interpret: "Interpretation",
+    rel_temp_cnt: "Temperature ↔ Rentals", rel_hum_cnt: "Humidity ↔ Rentals", rel_wind_cnt: "Wind Speed ↔ Rentals", rel_temp_hum: "Temperature ↔ Humidity",
+    interp_negligible: "Negligible", interp_weak: "Weak", interp_moderate: "Moderate", interp_strong: "Strong",
+    interp_pos: "positive", interp_neg: "negative",
+    an_reg_title: "Regression Analysis — Rentals vs. Temperature",
+    an_reg_explain: "A simple linear regression estimating total rentals from temperature. R² shows how much of the variation in rentals temperature alone explains.",
+    kpi_equation: "Equation", kpi_rsq: "R²", kpi_r: "R (correlation)", kpi_obs: "Observations",
+    tt_export_latest: "Download all current records (Raw_Data + Web_Entries) as a new Excel file. The original workbook is never modified.",
+    tt_export_updated: "Regenerate the analysis workbook from the original template with the latest data and recalculated statistics, as a new file.",
+    tt_update_now: "Manually recalculate all statistics (descriptive, correlation, regression) right now, instead of waiting for the next automatic recalculation.",
+
+    st_title: "Data Update Status", st_sub: "Shows the status of database → Excel synchronization and analysis recalculation.",
+    btn_update_now: "⟳ Update Analysis Now", btn_updating: "Updating…",
+    kpi_last_sync: "Last Sync", kpi_records_processed: "Records Processed (last run)", kpi_status: "Current Status",
+    st_history_title: "Synchronization History",
+    th_time: "Time", th_event: "Event", th_status: "Status", th_records: "Records", th_message: "Message",
+    msg_update_success: "Analysis updated successfully.",
+    msg_update_fail: "Update failed: {err}. You can retry.",
+  },
+  th: {
+    nav_dashboard: "แดชบอร์ด", nav_data: "จัดการข้อมูล", nav_add: "เพิ่ม / แก้ไข",
+    nav_analysis: "ผลการวิเคราะห์", nav_status: "สถานะการอัปเดต",
+    footer: "BikeShare Analytics — ชุดข้อมูลการเช่าจักรยาน กรุงวอชิงตัน ดี.ซี. 2011–2012 (UCI ML Repository)",
+
+    dash_title: "แดชบอร์ด", dash_sub: "ภาพรวมการเช่าจักรยาน แสดงผลผ่านแดชบอร์ด Tableau ด้านล่าง",
+    tab_overview: "ภาพรวม", tab_time: "ช่วงเวลา", tab_weather: "สภาพอากาศ", tab_whatif: "จำลองสถานการณ์", tab_forecasting: "การพยากรณ์",
+    tableau_placeholder: "แดชบอร์ด Tableau \"{name}\" จะแสดงที่นี่เมื่อเชื่อมต่อลิงก์สำหรับเผยแพร่แล้ว",
+    tableau_files_note: "ไฟล์ Tableau (Project_data_Analysis.twb) ถูกเก็บไว้ในโปรเจกต์ที่ /static/tableau/ แล้ว พร้อมเชื่อมต่อทันทีที่ได้รับข้อมูลสำหรับเผยแพร่",
+    tableau_download: "ดาวน์โหลดไฟล์ Tableau (.twb)",
+    tableau_switch_hint: "ใช้แท็บภายในแดชบอร์ดด้านบนเพื่อสลับระหว่าง ภาพรวม, ช่วงเวลา, สภาพอากาศ, จำลองสถานการณ์ และการพยากรณ์",
+    tableau_refresh_title: "เกี่ยวกับการอัปเดตแดชบอร์ด",
+    tbl_update_title: "อัปเดตแผนภูมิ Tableau",
+    tbl_step2: "URL แดชบอร์ด Tableau Public:",
+    btn_tableau_csv: "⬇ ส่งออกข้อมูลสำหรับ Tableau (CSV)",
+    btn_tableau_xlsx: "⬇ ส่งออกข้อมูลสำหรับ Tableau (Excel)",
+    tt_tableau_export: "ดาวน์โหลดข้อมูลทั้งหมดที่อยู่ในฐานข้อมูลขณะนี้ (ข้อมูลต้นฉบับ + ข้อมูลที่เพิ่มผ่านเว็บไซต์) เพื่อใช้อัปเดตแผนภูมิใน Tableau Public",
+    ph_tableau_url: "วาง URL แดชบอร์ด Tableau Public ที่นี่",
+    btn_update_charts: "อัปเดตแผนภูมิ",
+    tt_update_charts: "บันทึก URL นี้และโหลดแผนภูมิที่อัปเดตแล้วจาก URL ดังกล่าว",
+    tbl_status_loaded: "โหลดแผนภูมิจาก URL ที่บันทึกไว้เมื่อ {time}",
+    tbl_status_error: "ไม่สามารถอัปเดตแผนภูมิได้: {err}",
+    tbl_how_1: "ที่หน้า Data Management ให้คลิก ส่งออกข้อมูลสำหรับ Tableau (CSV หรือ Excel) ไฟล์จะมีทุกระเบียนที่อยู่ในฐานข้อมูลขณะนี้ ทั้งข้อมูลต้นฉบับและข้อมูลที่เพิ่ม แก้ไข หรือลบผ่านเว็บไซต์",
+    tbl_how_2: "เปิดเวิร์กบุ๊ก Tableau ของคุณ อัปเดตแหล่งข้อมูลด้วยไฟล์ที่ส่งออก จากนั้นอัปเดตแผนภูมิและเผยแพร่เวิร์กบุ๊กซ้ำไปยัง Tableau Public",
+    tbl_how_3: "คัดลอก URL แดชบอร์ดที่อัปเดตแล้วจาก Tableau Public แล้ววางในช่อง URL ด้านบน",
+    tbl_how_4: "คลิก อัปเดตแผนภูมิ เว็บไซต์จะบันทึก URL (ยังคงอยู่เมื่อรีเฟรชหรือเปิดเว็บไซต์ใหม่) และแสดงแผนภูมิที่อัปเดตแล้วจาก URL นั้น",
+    th_hr_full: "ชั่วโมง",
+    th_total_rentals: "จำนวนการเช่าทั้งหมด",
+
+    data_title: "จัดการข้อมูล",
+    data_sub: "ข้อมูลจาก Raw_Data (ต้นฉบับ) และ Web_Entries (เพิ่มผ่านเว็บไซต์นี้)",
+    btn_add: "+ เพิ่มข้อมูล",
+    f_source: "แหล่งข้อมูล", f_source_all: "ทั้งหมด", f_source_raw: "Raw_Data (ต้นฉบับ)", f_source_web: "Web_Entries (เว็บไซต์)",
+    f_season: "ฤดูกาล", f_season_all: "ทั้งหมด", f_spring: "ใบไม้ผลิ", f_summer: "ร้อน", f_fall: "ใบไม้ร่วง", f_winter: "หนาว",
+    f_weather: "สภาพอากาศ", f_weather_all: "ทั้งหมด", f_clear: "แจ่มใส", f_mist: "มีหมอก/มีเมฆ", f_rain: "ฝนตกเล็กน้อย/หิมะ", f_severe: "สภาพอากาศรุนแรง",
+    f_month: "เดือน", f_month_all: "ทุกเดือน", f_year: "ปี", f_year_all: "ทุกปี",
+    btn_apply: "ใช้ตัวกรอง", btn_clear: "ล้างตัวกรอง",
+    th_id: "รหัส", th_source: "แหล่งข้อมูล", th_date: "วันที่", th_hr: "ชม.", th_season: "ฤดูกาล", th_weather: "สภาพอากาศ",
+    th_temp: "อุณหภูมิ (°C)", th_hum: "ความชื้น (%)", th_casual: "ผู้ใช้ทั่วไป", th_registered: "สมาชิก", th_total: "รวม", th_actions: "การจัดการ",
+    tag_raw: "ต้นฉบับ", tag_web: "เว็บไซต์",
+    btn_edit: "แก้ไข", btn_delete: "ลบ", lbl_protected: "ข้อมูลป้องกันไว้",
+    modal_delete_title: "ยืนยันการลบข้อมูลนี้ใช่หรือไม่?",
+    modal_delete_body: "การลบนี้ไม่สามารถย้อนกลับได้ ลบได้เฉพาะข้อมูลที่เพิ่มผ่านเว็บไซต์ ข้อมูลต้นฉบับจะได้รับการป้องกัน",
+    btn_cancel: "ยกเลิก", btn_confirm_delete: "ลบข้อมูล",
+    msg_deleted: "ลบข้อมูลเรียบร้อยแล้ว และอัปเดตผลการวิเคราะห์แล้ว",
+    err_delete_protected: "ลบได้เฉพาะข้อมูลที่เพิ่มผ่านเว็บไซต์เท่านั้น",
+
+    add_title_new: "เพิ่มข้อมูลใหม่", add_title_edit: "แก้ไขข้อมูล #{id}",
+    add_sub: "กรอกค่าทั้งหมดเป็นหน่วยที่ใช้งานทั่วไป ระบบจะแปลงเป็นรูปแบบปกติ (normalized) ที่ใช้ใน Excel ให้โดยอัตโนมัติ",
+    lbl_date: "วันที่", lbl_hour: "ชั่วโมง (0–23)", lbl_season: "ฤดูกาล", lbl_holiday: "วันหยุด",
+    lbl_workingday: "วันทำงาน", lbl_weathersit: "สภาพอากาศ",
+    lbl_temp: "อุณหภูมิ (°C)", hint_temp: "จัดเก็บใน Excel เป็น temp = °C ÷ 41",
+    lbl_atemp: "อุณหภูมิที่รู้สึกได้ (°C)", hint_atemp: "จัดเก็บใน Excel เป็น atemp = °C ÷ 50",
+    lbl_hum: "ความชื้น (%)", hint_hum: "จัดเก็บใน Excel เป็น hum = % ÷ 100",
+    lbl_wind: "ความเร็วลม", hint_wind: "จัดเก็บใน Excel เป็น windspeed = ค่า ÷ 67",
+    lbl_casual: "จำนวนผู้ใช้ทั่วไป", lbl_registered: "จำนวนสมาชิก", lbl_total_auto: "ยอดรวมการเช่า (คำนวณอัตโนมัติ)",
+    opt_yes: "ใช่", opt_no: "ไม่ใช่",
+    ph_hr: "เช่น 14 (0–23 น.)", ph_temp: "เช่น 22.5 °C", ph_atemp: "เช่น 24.0 °C",
+    ph_hum: "เช่น 65.0 %", ph_wind: "เช่น 12.50 กม./ชม.", ph_casual: "เช่น 15 คน", ph_registered: "เช่น 60 คน",
+    btn_save: "บันทึกข้อมูล",
+    msg_added: "เพิ่มข้อมูลเรียบร้อยแล้ว และคำนวณผลการวิเคราะห์ใหม่แล้ว",
+    msg_updated: "แก้ไขข้อมูลเรียบร้อยแล้ว และคำนวณผลการวิเคราะห์ใหม่แล้ว",
+
+    an_title: "ผลการวิเคราะห์",
+    an_sub: "คำนวณด้วยสูตรเทียบเท่า Excel จากข้อมูล Raw_Data + Web_Entries รวมกัน และคำนวณใหม่อัตโนมัติทุกครั้งที่มีการเพิ่ม/แก้ไข/ลบข้อมูล",
+    btn_export_latest: "⬇ ส่งออกข้อมูลล่าสุด", btn_export_updated: "⬇ สร้างไฟล์วิเคราะห์ฉบับอัปเดต",
+    an_desc_title: "สถิติเชิงพรรณนา — ยอดรวมการเช่า (cnt)",
+    an_desc_explain: "สรุปการกระจายตัวของจำนวนการเช่ารายชั่วโมง ทั้งค่ากลาง (ค่าเฉลี่ย/มัธยฐาน/ฐานนิยม) และการกระจาย (ส่วนเบี่ยงเบนมาตรฐาน, ความแปรปรวน)",
+    an_count: "จำนวนข้อมูล", an_mean: "ค่าเฉลี่ย", an_median: "มัธยฐาน", an_mode: "ฐานนิยม",
+    an_std: "ส่วนเบี่ยงเบนมาตรฐาน", an_var: "ความแปรปรวน", an_min: "ค่าต่ำสุด", an_max: "ค่าสูงสุด", an_total: "ยอดรวมการเช่า",
+    an_corr_title: "การวิเคราะห์สหสัมพันธ์",
+    an_corr_explain: "ค่าสหสัมพันธ์แบบเพียร์สันระหว่างปัจจัยสภาพอากาศกับยอดรวมการเช่า มีค่าตั้งแต่ -1 (สัมพันธ์ทางลบสูง) ถึง +1 (สัมพันธ์ทางบวกสูง) ความสัมพันธ์ไม่ได้หมายถึงสาเหตุและผล",
+    th_relationship: "ความสัมพันธ์", th_corrvalue: "ค่าสหสัมพันธ์ (r)", th_interpret: "การตีความ",
+    rel_temp_cnt: "อุณหภูมิ ↔ การเช่า", rel_hum_cnt: "ความชื้น ↔ การเช่า", rel_wind_cnt: "ความเร็วลม ↔ การเช่า", rel_temp_hum: "อุณหภูมิ ↔ ความชื้น",
+    interp_negligible: "แทบไม่มีนัยสำคัญ", interp_weak: "อ่อน", interp_moderate: "ปานกลาง", interp_strong: "สูง",
+    interp_pos: "เชิงบวก", interp_neg: "เชิงลบ",
+    an_reg_title: "การวิเคราะห์การถดถอย — การเช่า เทียบกับ อุณหภูมิ",
+    an_reg_explain: "แบบจำลองการถดถอยเชิงเส้นอย่างง่ายเพื่อประมาณยอดรวมการเช่าจากอุณหภูมิ ค่า R² แสดงว่าอุณหภูมิเพียงอย่างเดียวอธิบายความผันแปรของยอดเช่าได้มากเพียงใด",
+    kpi_equation: "สมการ", kpi_rsq: "R²", kpi_r: "R (สหสัมพันธ์)", kpi_obs: "จำนวนข้อมูลที่ใช้",
+    tt_export_latest: "ดาวน์โหลดข้อมูลปัจจุบันทั้งหมด (Raw_Data + Web_Entries) เป็นไฟล์ Excel ใหม่ ไม่มีผลกระทบต่อไฟล์ต้นฉบับ",
+    tt_export_updated: "สร้างไฟล์วิเคราะห์ใหม่จากเทมเพลตต้นฉบับ พร้อมข้อมูลล่าสุดและสถิติที่คำนวณใหม่ เป็นไฟล์แยกต่างหาก",
+    tt_update_now: "คำนวณสถิติทั้งหมด (เชิงพรรณนา, สหสัมพันธ์, ถดถอย) ใหม่ทันที แทนที่จะรอการคำนวณอัตโนมัติครั้งถัดไป",
+
+    st_title: "สถานะการอัปเดตข้อมูล", st_sub: "แสดงสถานะการซิงค์ข้อมูลระหว่างฐานข้อมูล → Excel และการคำนวณผลวิเคราะห์ใหม่",
+    btn_update_now: "⟳ อัปเดตผลวิเคราะห์ตอนนี้", btn_updating: "กำลังอัปเดต…",
+    kpi_last_sync: "ซิงค์ล่าสุด", kpi_records_processed: "จำนวนข้อมูลที่ประมวลผล (ครั้งล่าสุด)", kpi_status: "สถานะปัจจุบัน",
+    st_history_title: "ประวัติการซิงค์ข้อมูล",
+    th_time: "เวลา", th_event: "เหตุการณ์", th_status: "สถานะ", th_records: "จำนวนข้อมูล", th_message: "ข้อความ",
+    msg_update_success: "อัปเดตผลการวิเคราะห์สำเร็จแล้ว",
+    msg_update_fail: "อัปเดตไม่สำเร็จ: {err} สามารถลองใหม่ได้",
+  },
+};
+
+function getLang() {
+  try { return localStorage.getItem("bikeshare_lang") || "en"; } catch (e) { return "en"; }
+}
+function setLang(lang) {
+  try { localStorage.setItem("bikeshare_lang", lang); } catch (e) {}
+  document.documentElement.lang = lang;
+  applyI18n();
+}
+function t(key, vars) {
+  const lang = getLang();
+  let str = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+  if (vars) Object.keys(vars).forEach(k => { str = str.replace(`{${k}}`, vars[k]); });
+  return str;
+}
+function applyI18n() {
+  const lang = getLang();
+  document.documentElement.lang = lang;
+  document.body.style.fontFamily = lang === "th" ? "'Prompt', sans-serif" : "'Prompt', sans-serif";
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.getAttribute("data-i18n")); });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph"))); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => { el.setAttribute("title", t(el.getAttribute("data-i18n-title"))); });
+  document.querySelectorAll(".lang-btn").forEach(b => b.classList.toggle("active", b.dataset.lang === lang));
+  document.dispatchEvent(new CustomEvent("i18n:changed"));
+}
+document.addEventListener("DOMContentLoaded", applyI18n);

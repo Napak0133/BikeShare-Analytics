@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Data Management — BikeShare Analytics{% endblock %}
+{% block content %}
+<div class="flex-between">
+  <h1 data-i18n="data_title">Data Management</h1>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+    <a class="btn outline" href="/export/tableau-csv" data-i18n="btn_tableau_csv" data-i18n-title="tt_tableau_export">⬇ Export Data for Tableau (CSV)</a>
+    <a class="btn outline" href="/export/tableau-xlsx" data-i18n="btn_tableau_xlsx" data-i18n-title="tt_tableau_export">⬇ Export Data for Tableau (Excel)</a>
+    <a href="/data/add" class="btn secondary" data-i18n="btn_add">+ Add Record</a>
+  </div>
+</div>
+<p class="muted" data-i18n="data_sub">Records from Raw_Data (original) and Web_Entries (added via this website).</p>
+
+<div class="card">
+  <div class="filters">
+    <div><label data-i18n="f_month">Month</label>
+      <select id="fMonth">
+        <option value="" data-i18n="f_month_all">All months</option>
+        <option value="1">01</option><option value="2">02</option><option value="3">03</option><option value="4">04</option>
+        <option value="5">05</option><option value="6">06</option><option value="7">07</option><option value="8">08</option>
+        <option value="9">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+      </select>
+    </div>
+    <div><label data-i18n="f_year">Year</label>
+      <select id="fYear">
+        <option value="" data-i18n="f_year_all">All years</option>
+      </select>
+    </div>
+    <div><label data-i18n="f_source">Source</label>
+      <select id="fSource">
+        <option value="all" data-i18n="f_source_all">All</option>
+        <option value="raw" data-i18n="f_source_raw">Raw_Data (original)</option>
+        <option value="web" data-i18n="f_source_web">Web_Entries (website)</option>
+      </select>
+    </div>
+    <div><label data-i18n="f_season">Season</label>
+      <select id="fSeason">
+        <option value="" data-i18n="f_season_all">All</option>
+        <option value="1" data-i18n="f_spring">Spring</option><option value="2" data-i18n="f_summer">Summer</option>
+        <option value="3" data-i18n="f_fall">Fall</option><option value="4" data-i18n="f_winter">Winter</option>
+      </select>
+    </div>
+    <div><label data-i18n="f_weather">Weather</label>
+      <select id="fWeather">
+        <option value="" data-i18n="f_weather_all">All</option>
+        <option value="1" data-i18n="f_clear">Clear</option><option value="2" data-i18n="f_mist">Mist/Cloudy</option>
+        <option value="3" data-i18n="f_rain">Light Rain/Snow</option><option value="4" data-i18n="f_severe">Severe</option>
+      </select>
+    </div>
+    <div><button class="btn" id="btnFilter" data-i18n="btn_apply">Apply Filters</button></div>
+    <div><button class="btn outline" id="btnClear" data-i18n="btn_clear">Clear</button></div>
+  </div>
+
+  <div id="alertBox"></div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th data-i18n="th_id">ID</th><th data-i18n="th_source">Source</th><th data-i18n="th_date">Date</th>
+        <th data-i18n="th_hr">Hr</th><th data-i18n="th_season">Season</th><th data-i18n="th_weather">Weather</th>
+        <th data-i18n="th_temp">Temp (°C)</th><th data-i18n="th_hum">Humidity (%)</th>
+        <th data-i18n="th_casual">Casual</th><th data-i18n="th_registered">Registered</th>
+        <th data-i18n="th_total">Total</th><th data-i18n="th_actions">Actions</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <h3 data-i18n="modal_delete_title">Delete this record?</h3>
+    <p class="muted" data-i18n="modal_delete_body">This cannot be undone. Only website-added records can be deleted; the original dataset is protected.</p>
+    <div class="modal-actions">
+      <button class="btn outline" id="cancelDelete" data-i18n="btn_cancel">Cancel</button>
+      <button class="btn danger" id="confirmDelete" data-i18n="btn_confirm_delete">Delete</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let page = 1;
+let pendingDeleteId = null;
+
+function buildQuery() {
+  const p = new URLSearchParams();
+  p.set("page", page);
+  p.set("per_page", 25);
+  if (document.getElementById("fMonth").value) p.set("month", document.getElementById("fMonth").value);
+  if (document.getElementById("fYear").value) p.set("year", document.getElementById("fYear").value);
+  p.set("source", document.getElementById("fSource").value);
+  if (document.getElementById("fSeason").value) p.set("season", document.getElementById("fSeason").value);
+  if (document.getElementById("fWeather").value) p.set("weathersit", document.getElementById("fWeather").value);
+  return p.toString();
+}
+
+const SEASON_KEYS = { 1: "f_spring", 2: "f_summer", 3: "f_fall", 4: "f_winter" };
+const WEATHER_KEYS = { 1: "f_clear", 2: "f_mist", 3: "f_rain", 4: "f_severe" };
+
+async function loadTable() {
+  const data = await apiGet("/api/records?" + buildQuery());
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+  data.records.forEach(r => {
+    const tr = document.createElement("tr");
+    const canEdit = r.source === "web";
+    tr.innerHTML = `
+      <td>${r.instant}</td>
+      <td><span class="tag ${r.source}">${r.source === "web" ? t("tag_web") : t("tag_raw")}</span></td>
+      <td>${r.dteday}</td>
+      <td>${r.hr}</td>
+      <td>${t(SEASON_KEYS[r.season])}</td>
+      <td>${t(WEATHER_KEYS[r.weathersit])}</td>
+      <td>${r.temp_c}</td>
+      <td>${r.hum_pct}</td>
+      <td>${r.casual}</td>
+      <td>${r.registered}</td>
+      <td><strong>${r.cnt}</strong></td>
+      <td>
+        ${canEdit ? `<a class="btn outline" style="padding:4px 9px;font-size:.78rem" href="/data/add?id=${r.instant}">${t("btn_edit")}</a>
+        <button class="btn danger" style="padding:4px 9px;font-size:.78rem" onclick="askDelete(${r.instant})">${t("btn_delete")}</button>`
+        : `<span class="muted" style="font-size:.78rem">${t("lbl_protected")}</span>`}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  renderPagination(data.page, data.total_pages, data.total);
+}
+
+function renderPagination(current, totalPages, total) {
+  const el = document.getElementById("pagination");
+  el.innerHTML = "";
+  const info = document.createElement("span");
+  info.className = "muted";
+  info.style.marginRight = "10px";
+  info.textContent = `${fmtNumber(total)} · ${current}/${totalPages}`;
+  el.appendChild(info);
+
+  const mk = (label, p, disabled, active) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.disabled = disabled;
+    if (active) b.classList.add("active");
+    b.onclick = () => { page = p; loadTable(); };
+    return b;
+  };
+  el.appendChild(mk("« Prev", current - 1, current <= 1, false));
+  const windowStart = Math.max(1, current - 2);
+  const windowEnd = Math.min(totalPages, current + 2);
+  for (let p = windowStart; p <= windowEnd; p++) el.appendChild(mk(String(p), p, false, p === current));
+  el.appendChild(mk("Next »", current + 1, current >= totalPages, false));
+}
+
+function askDelete(id) {
+  pendingDeleteId = id;
+  document.getElementById("confirmModal").classList.add("show");
+}
+
+document.getElementById("cancelDelete").onclick = () => {
+  document.getElementById("confirmModal").classList.remove("show");
+};
+
+document.getElementById("confirmDelete").onclick = async () => {
+  try {
+    await apiSend(`/api/records/${pendingDeleteId}`, "DELETE");
+    document.getElementById("confirmModal").classList.remove("show");
+    showAlert(t("msg_deleted"), "success");
+    loadTable();
+  } catch (e) {
+    document.getElementById("confirmModal").classList.remove("show");
+    showAlert(t("err_delete_protected"), "error");
+  }
+};
+
+function showAlert(msg, type) {
+  document.getElementById("alertBox").innerHTML = `<div class="alert ${type}">${msg}</div>`;
+  setTimeout(() => (document.getElementById("alertBox").innerHTML = ""), 4000);
+}
+
+document.getElementById("btnFilter").onclick = () => { page = 1; loadTable(); };
+document.getElementById("btnClear").onclick = () => {
+  document.getElementById("fMonth").value = "";
+  document.getElementById("fYear").value = "";
+  document.getElementById("fSource").value = "all";
+  document.getElementById("fSeason").value = "";
+  document.getElementById("fWeather").value = "";
+  page = 1; loadTable();
+};
+
+async function populateYears() {
+  const years = await apiGet("/api/years");
+  const sel = document.getElementById("fYear");
+  const keep = sel.querySelector('option[value=""]');
+  sel.innerHTML = "";
+  sel.appendChild(keep);
+  years.forEach(y => {
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = y;
+    sel.appendChild(opt);
+  });
+}
+
+document.addEventListener("i18n:changed", loadTable);
+populateYears().then(loadTable);
+</script>
+{% endblock %}

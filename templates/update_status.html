@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Data Update Status — BikeShare Analytics{% endblock %}
+{% block content %}
+<div class="flex-between">
+  <h1 data-i18n="st_title">Data Update Status</h1>
+  <button class="btn secondary" id="btnUpdate" data-i18n="btn_update_now" data-i18n-title="tt_update_now">⟳ Update Analysis Now</button>
+</div>
+<p class="muted" data-i18n="st_sub">Administrator view. Shows the status of database → Excel synchronization and analysis recalculation.</p>
+
+<div id="alertBox"></div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="label" data-i18n="kpi_last_sync">Last Sync</div><div class="value" style="font-size:1.1rem" id="lastSync">—</div></div>
+  <div class="kpi accent"><div class="label" data-i18n="kpi_records_processed">Records Processed (last run)</div><div class="value" id="lastCount">—</div></div>
+  <div class="kpi"><div class="label" data-i18n="kpi_status">Current Status</div><div class="value" id="lastStatus">—</div></div>
+</div>
+
+<div class="card">
+  <h2 data-i18n="st_history_title">Synchronization History</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="th_time">Time</th><th data-i18n="th_event">Event</th><th data-i18n="th_status">Status</th><th data-i18n="th_records">Records</th><th data-i18n="th_message">Message</th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let logRows = [];
+
+async function loadLog() {
+  logRows = await apiGet("/api/sync-log");
+  renderLog();
+}
+
+function renderLog() {
+  const tbody = document.getElementById("logBody");
+  tbody.innerHTML = logRows.map(r => `
+    <tr>
+      <td>${r.event_time}</td>
+      <td>${r.event_type}</td>
+      <td><span class="status-pill ${r.status}">${r.status}</span></td>
+      <td>${fmtNumber(r.records_synced)}</td>
+      <td class="muted">${r.message || ""}</td>
+    </tr>`).join("");
+
+  if (logRows.length) {
+    const latest = logRows[0];
+    document.getElementById("lastSync").textContent = latest.event_time;
+    document.getElementById("lastCount").textContent = fmtNumber(latest.records_synced);
+    document.getElementById("lastStatus").innerHTML =
+      `<span class="status-pill ${latest.status}">${latest.status}</span>`;
+  }
+}
+
+document.getElementById("btnUpdate").addEventListener("click", async () => {
+  const btn = document.getElementById("btnUpdate");
+  btn.disabled = true;
+  btn.textContent = t("btn_updating");
+  try {
+    await apiSend("/api/analysis/update", "POST", {});
+    document.getElementById("alertBox").innerHTML =
+      `<div class="alert success">${t("msg_update_success")}</div>`;
+  } catch (e) {
+    document.getElementById("alertBox").innerHTML =
+      `<div class="alert error">${t("msg_update_fail", { err: e.message })}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t("btn_update_now");
+    loadLog();
+  }
+});
+
+document.addEventListener("i18n:changed", renderLog);
+loadLog();
+</script>
+{% endblock %}
