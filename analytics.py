@@ -358,5 +358,7 @@ def export_tableau_xlsx():
     for cell in ws["B"][1:]:
         cell.number_format = "yyyy-mm-dd hh:mm:ss"
     out_path = os.path.join(OUTPUT_DIR, "Bike_Sharing_Tableau_Data.xlsx")
-    wb.save(out_path)
+    tmp_path = out_path + ".tmp"
+    wb.save(tmp_path)
+    os.replace(tmp_path, out_path)      # atomic: readers never see a half-written file
     return out_path, len(rows)

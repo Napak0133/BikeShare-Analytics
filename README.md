@@ -15,23 +15,38 @@ A Flask website for managing and analyzing the Bike Sharing dataset (Washington 
 | Auto update | Every add/edit/delete recalculates descriptive/correlation/regression stats and logs a sync event |
 | Manual update | "Update Analysis Now" button on the Data Update Status page |
 | Export buttons | `Bike_Sharing_Export.xlsx` (raw DB dump) and `Bike_Sharing_Analysis_Updated.xlsx` (template + recalculated results) |
-| Tableau | Embedded Tableau Public dashboard; a saved URL box and **Update Charts** button on the Dashboard page; CSV / Excel export buttons on the Data Management page |
+| Tableau | Excel → `.hyper` → `.twb` pipeline (`tableau_sync.py`) + embedded dashboard — see section 5 |
 | Unit conversion | `analytics.py` — temp×41=°C, atemp×50=°C, hum×100=%, windspeed×67 |
 
 Authentication/roles were explicitly **out of scope** for this build (single-user).
 
-## 2. Setup
+## 2. Setup and running the website (terminal)
 
-```bash
-cd bikeshare_app
+Python 3.10+ is required (the project was built with 3.12). Open a terminal **inside the project folder**
+(the folder that contains `app.py`).
+
+**Windows (PowerShell or Command Prompt)**
+```powershell
+cd "path\to\Website_BikeShare Analytics_3"
 python -m venv venv
-source venv/bin/activate        # venv\Scripts\activate on Windows
+venv\Scripts\activate            # PowerShell may need:  Set-ExecutionPolicy -Scope Process RemoteSigned
 pip install -r requirements.txt
-python init_db.py               # creates bikeshare.db and imports Raw_Data (run once)
-python app.py                   # starts the dev server on http://127.0.0.1:5000
+python init_db.py                 # only if bikeshare.db does not exist yet
+python app.py
 ```
 
-Open http://127.0.0.1:5000 in a browser.
+**macOS / Linux**
+```bash
+cd "path/to/Website_BikeShare Analytics_3"
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python init_db.py                 # only if bikeshare.db does not exist yet
+python app.py
+```
+
+Then open http://127.0.0.1:5000 in a browser. Stop the server with `Ctrl + C`; leave the virtual
+environment with `deactivate`. Next time you only need: activate the venv, then `python app.py`.
 
 To start over with a fresh database, delete `bikeshare.db` and re-run `python init_db.py`.
 
@@ -42,6 +57,7 @@ bikeshare_app/
 ├── app.py                 Flask routes + REST API
 ├── analytics.py           Calculations, unit conversion, Excel export
 ├── init_db.py             One-time DB setup / Raw_Data import
+├── tableau_sync.py        Dashboard pipeline: Excel → .hyper → .twb/.twbx
 ├── requirements.txt
 ├── bikeshare.db            (created after init_db.py)
 ├── data/
@@ -52,21 +68,18 @@ bikeshare_app/
 │                            analysis_results, update_status, base)
 └── static/
     ├── css/style.css       Light theme, blue/green/navy (spec section 10)
-    └── js/main.js          Shared fetch/formatting helpers
+    ├── js/main.js          Shared fetch/formatting helpers
+    └── tableau/            template/ (original .twb), generated .hyper / .twb / .twbx
 ```
 
 ## 4. User manual
 
 ### Dashboard (`/`)
-Shows the embedded Tableau Public dashboard. To update its charts after the data changes:
-1. On the **Data Management** page, click **Export Data for Tableau (CSV)** or **(Excel)**. The file contains every record
-   currently in the database (original data plus website additions, edits and deletions),
-   with the same 17 columns as the original dataset.
-2. Open your Tableau workbook, update its data source with that file, update the charts and
-   republish to Tableau Public.
-3. Copy the updated Dashboard URL and paste it into the URL box on the Dashboard page.
-4. Click **Update Charts**. The URL is saved in the database (so it survives reloads and
-   restarts) and the charts are loaded from it.
+Shows total rentals, average rentals/hour, casual vs. registered users, and four charts
+(monthly trend, hourly pattern, seasonal comparison, weather comparison). The Tableau
+Dashboard area is a placeholder until the real workbook/URL is supplied — swap in the
+Tableau embed code where the placeholder `<div class="placeholder-box">` is in
+`templates/dashboard.html`.
 
 ### Data Management (`/data`)
 Browse all 17,379+ records with pagination, search by date, and filter by data source
@@ -82,22 +95,47 @@ Casual + Registered and is read-only.
 
 ### Analysis Results (`/analysis`)
 Descriptive statistics, correlation table, and regression results for rentals vs.
-temperature, plus hourly/seasonal/weather summary tables — recomputed over
-Raw_Data + Web_Entries combined every time this page loads. The summaries by hour,
-season and weather are shown as tables. Two buttons let you download the latest raw data or
-generate a refreshed analysis workbook.
+temperature, plus hourly/seasonal/weather summary charts — recomputed over
+Raw_Data + Web_Entries combined every time this page loads. Two buttons let you
+download the latest raw data or generate a refreshed analysis workbook.
 
 ### Data Update Status (`/status`)
 Shows the most recent synchronization time, records processed, and current status,
 plus a full history table. The **Update Analysis Now** button manually triggers
 recalculation (useful after bulk changes or to retry a failed sync).
 
-## 5. Notes on "live" Excel/Tableau sync
+## 5. Dashboard update pipeline (Excel → .hyper → .twb → Dashboard)
 
-The spec's "database connected to Excel" / "Tableau refresh" steps are implemented as:
-- **DB → Excel**: on-demand generation of `.xlsx` files via the export buttons (closest
-  practical equivalent to a live ODBC/Power Query link, which depends on the
-  institution's actual Excel/Tableau environment — see spec section 6.4/9).
-- **Database → Tableau Public**: Tableau Public cannot connect to this website's database, so
-  the Data Management page exports the current database to CSV / Excel; you update and republish
-  the workbook in Tableau, then paste the new URL and click **Update Charts**.
+After every add / edit / delete (and on the Dashboard's **Refresh data now** button) the site runs
+`tableau_sync.py`:
+
+1. **Excel → .hyper** — all records (original + website) are written to
+   `exports/Bike_Sharing_Tableau_Data.xlsx`, which is loaded into `static/tableau/Bike_Sharing.hyper`
+   (Tableau Hyper API; table `Extract.Extract`, the 17 dataset columns).
+2. **.hyper → .twb** — `static/tableau/template/Project_data_Analysis.twb` (the original workbook, never
+   modified) is copied to `static/tableau/Project_data_Analysis.twb` with its data source switched from the
+   Excel union (Raw_Data + Web_Entries) to the `.hyper`. Worksheets, calculated fields, parameters and the
+   dashboard layout are unchanged. The workbook and extract are also zipped as `Project_data_Analysis.twbx`.
+3. **Dashboard** — the Dashboard page embeds the published workbook. A browser cannot open a local
+   `.twb/.twbx`, so the new data appears there after the `.twbx` is published (Tableau: *Save to Tableau
+   Public*, or publish to Tableau Cloud/Server) and its URL is saved with **Update Charts**.
+
+Run it manually: `python tableau_sync.py [--excel file.xlsx]`. Result and errors are logged on the
+*Data Update Status* page (event `tableau_sync`).
+
+### Live charts (auto-updating, no Tableau needed)
+
+A browser cannot render a `.twb`/`.twbx` file, and Tableau Public has no API for uploading a new extract,
+so the Tableau charts only change after you re-publish the workbook by hand. To get charts that really update
+by themselves, the top of the Dashboard page draws four Chart.js charts (monthly, hourly, season, weather) plus
+KPI cards straight from `/api/dashboard` (Raw_Data + Web_Entries) and re-checks every 5 seconds
+(`LIVE_REFRESH_MS` in `templates/dashboard.html`). Add / edit / delete a record and every open Dashboard tab
+updates within a few seconds. The Excel → .hyper → .twb pipeline keeps running for the Tableau workbook.
+Runs of the pipeline are serialized with a lock and the Excel file is written atomically, which fixes the
+occasional `Bad CRC-32` sync error.
+
+## 6. Notes
+
+- **DB → Excel**: `.xlsx` files are generated on demand/after every change (no live ODBC link).
+- **Holiday / Working Day**: working day = Monday–Friday and not a public holiday. The form fills it in
+  automatically and the server rejects contradictory combinations.

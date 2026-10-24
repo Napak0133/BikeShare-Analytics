@@ -10,16 +10,18 @@
   <form id="recordForm">
     <div class="form-grid">
       <div class="field"><label data-i18n="lbl_date">Date</label><input type="date" id="dteday" required></div>
-      <div class="field"><label data-i18n="lbl_hour">Hour (0–23)</label><input type="number" id="hr" min="0" max="23" step="1" required data-i18n-ph="ph_hr"></div>
+      <div class="field"><label data-i18n="lbl_hour">Hour of day (hours, 0–23)</label><input type="number" id="hr" min="0" max="23" step="1" required data-i18n-ph="ph_hr"></div>
       <div class="field"><label data-i18n="lbl_season">Season</label>
         <select id="season" required>
           <option value="1" data-i18n="f_spring">Spring</option><option value="2" data-i18n="f_summer">Summer</option>
           <option value="3" data-i18n="f_fall">Fall</option><option value="4" data-i18n="f_winter">Winter</option>
         </select></div>
-      <div class="field"><label data-i18n="lbl_holiday">Holiday</label>
-        <select id="holiday"><option value="0" data-i18n="opt_no">No</option><option value="1" data-i18n="opt_yes">Yes</option></select></div>
+      <div class="field"><label data-i18n="lbl_holiday">Public Holiday</label>
+        <select id="holiday"><option value="0" data-i18n="opt_no">No</option><option value="1" data-i18n="opt_yes">Yes</option></select>
+        <small class="muted" data-i18n="hint_holiday"></small></div>
       <div class="field"><label data-i18n="lbl_workingday">Working Day</label>
-        <select id="workingday"><option value="1" data-i18n="opt_yes">Yes</option><option value="0" data-i18n="opt_no">No</option></select></div>
+        <select id="workingday"><option value="1" data-i18n="opt_yes">Yes</option><option value="0" data-i18n="opt_no">No</option></select>
+        <small class="muted" data-i18n="hint_workingday"></small></div>
       <div class="field"><label data-i18n="lbl_weathersit">Weather Situation</label>
         <select id="weathersit" required>
           <option value="1" data-i18n="f_clear">Clear</option><option value="2" data-i18n="f_mist">Mist / Cloudy</option>
@@ -74,6 +76,17 @@ document.getElementById("registered").addEventListener("input", recalcTotal);
 function weekdayFromDate(dateStr) {
   return new Date(dateStr + "T00:00:00").getDay();
 }
+
+// Working day = Monday-Friday AND not a public holiday (same rule as the original dataset).
+function suggestWorkingDay() {
+  const d = document.getElementById("dteday").value;
+  if (!d) return;
+  const wd = weekdayFromDate(d);
+  const isHoliday = document.getElementById("holiday").value === "1";
+  document.getElementById("workingday").value = (wd >= 1 && wd <= 5 && !isHoliday) ? "1" : "0";
+}
+document.getElementById("dteday").addEventListener("change", suggestWorkingDay);
+document.getElementById("holiday").addEventListener("change", suggestWorkingDay);
 
 function setPageTitle() {
   document.getElementById("pageTitle").textContent = editId ? t("add_title_edit", { id: editId }) : t("add_title_new");

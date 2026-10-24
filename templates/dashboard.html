@@ -8,20 +8,46 @@
   <p class="muted" data-i18n="dash_sub">Overview of bike-sharing rentals, powered by the Tableau dashboard below.</p>
 </div>
 
+<div class="card" style="border-left:4px solid var(--navy)">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <h2 style="margin:0" data-i18n="live_title">Live charts</h2>
+    <span id="liveStatus" class="muted" style="font-size:.82rem"></span>
+  </div>
+  <p class="muted" style="font-size:.86rem;margin:6px 0 14px" data-i18n="live_hint"></p>
+  <div class="kpi-grid" id="liveKpis"></div>
+  <div class="chart-grid">
+    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_monthly"></h3><div style="position:relative;height:280px"><canvas id="chMonthly"></canvas></div></div>
+    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_hourly"></h3><div style="position:relative;height:280px"><canvas id="chHourly"></canvas></div></div>
+    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_season"></h3><div style="position:relative;height:280px"><canvas id="chSeason"></canvas></div></div>
+    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_weather"></h3><div style="position:relative;height:280px"><canvas id="chWeather"></canvas></div></div>
+  </div>
+</div>
+
+<h2 style="margin:28px 0 12px" data-i18n="tbl_optional_title">Optional: Tableau workbook (Tableau Public)</h2>
+
 <div class="card" style="font-size:.86rem; border-left: 4px solid var(--brown)">
   <strong data-i18n="tableau_refresh_title">About dashboard updates</strong>
   <ol class="muted" style="margin:8px 0 0;padding-left:20px;line-height:1.7">
     <li data-i18n="tbl_how_1"></li>
     <li data-i18n="tbl_how_2"></li>
     <li data-i18n="tbl_how_3"></li>
-    <li data-i18n="tbl_how_4"></li>
   </ol>
 </div>
 
 <div class="card">
-  <h2 data-i18n="tbl_update_title">Update Tableau Charts</h2>
+  <h2 data-i18n="tbl_pipeline_title">Data pipeline: Excel → .hyper → .twb</h2>
+  <div id="pipelineStatus" class="muted" style="font-size:.88rem;line-height:1.7"></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+    <button class="btn secondary" id="btnRefreshPipeline" data-i18n="btn_refresh_pipeline" data-i18n-title="tt_refresh_pipeline">Refresh data now</button>
+    <a class="btn outline" href="/export/tableau-workbook" data-i18n="btn_dl_twbx" data-i18n-title="tt_dl_twbx">Download workbook (.twbx)</a>
+    <a class="btn outline" href="/export/tableau-hyper" data-i18n="btn_dl_hyper">Download extract (.hyper)</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 data-i18n="tbl_update_title">Show the published charts</h2>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <strong style="font-size:.88rem" data-i18n="tbl_step2">2. Tableau Public dashboard URL:</strong>
+    <strong style="font-size:.88rem" data-i18n="tbl_step2">Tableau Public dashboard URL:</strong>
     <input type="url" id="tableauUrl" style="flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--border, #ccc);border-radius:6px;font:inherit"
            data-i18n-ph="ph_tableau_url" placeholder="https://public.tableau.com/...">
     <button class="btn secondary" id="btnUpdateCharts" data-i18n="btn_update_charts" data-i18n-title="tt_update_charts">Update Charts</button>
@@ -46,6 +72,85 @@
 {% block scripts %}
 <script src='https://public.tableau.com/javascripts/api/tableau-2.min.js'></script>
 <script type='text/javascript'>
+// ---------------------------------------------------------------- live charts (auto-refresh)
+const LIVE_REFRESH_MS = 5000;
+const SEASON_I18N = { "Spring": "f_spring", "Summer": "f_summer", "Fall": "f_fall", "Winter": "f_winter" };
+const WEATHER_I18N = { "Clear": "f_clear", "Mist/Cloudy": "f_mist", "Light Rain/Snow": "f_rain", "Severe Weather": "f_severe" };
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const liveCharts = {};
+let liveData = null, liveSignature = null;
+
+function upsertChart(id, type, labels, datasets, opts) {
+  if (liveCharts[id]) {
+    const c = liveCharts[id];
+    c.data.labels = labels; c.data.datasets = datasets;
+    c.update("none");
+    return;
+  }
+  liveCharts[id] = new Chart(document.getElementById(id), {
+    type, data: { labels, datasets },
+    options: Object.assign({ responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }, opts || {}),
+  });
+}
+
+function renderLive() {
+  const d = liveData; if (!d) return;
+  const kpi = (labelKey, value, accent) =>
+    `<div class="kpi${accent ? " accent" : ""}"><div class="label">${t(labelKey)}</div><div class="value">${value}</div></div>`;
+  document.getElementById("liveKpis").innerHTML =
+    kpi("live_kpi_total", fmtNumber(d.total_rentals)) +
+    kpi("live_kpi_avg", d.avg_per_hour, true) +
+    kpi("live_kpi_casual", fmtNumber(d.total_casual)) +
+    kpi("live_kpi_registered", fmtNumber(d.total_registered), true) +
+    kpi("live_kpi_records", fmtNumber(d.record_count));
+
+  const navy = "#326080", brown = "#b07a3c", green = "#4a9a6a";
+  upsertChart("chMonthly", "line",
+    d.monthly.map(m => `${MONTHS[m.month - 1]} ${m.year}`),
+    [{ label: t("th_casual"), data: d.monthly.map(m => m.casual), borderColor: brown, backgroundColor: brown, tension: .25 },
+     { label: t("th_registered"), data: d.monthly.map(m => m.registered), borderColor: navy, backgroundColor: navy, tension: .25 }]);
+  const hours = Object.keys(d.hourly);
+  upsertChart("chHourly", "bar", hours.map(h => h + ":00"),
+    [{ label: t("th_total_rentals"), data: hours.map(h => d.hourly[h]), backgroundColor: navy }],
+    { plugins: { legend: { display: false } } });
+  const seasons = Object.keys(SEASON_I18N).filter(k => k in d.season);
+  upsertChart("chSeason", "bar", seasons.map(k => t(SEASON_I18N[k] || k)),
+    [{ label: t("th_total_rentals"), data: seasons.map(k => d.season[k]), backgroundColor: green }],
+    { plugins: { legend: { display: false } } });
+  const weather = Object.keys(WEATHER_I18N).filter(k => k in d.weather);
+  upsertChart("chWeather", "bar", weather.map(k => t(WEATHER_I18N[k] || k)),
+    [{ label: t("th_total_rentals"), data: weather.map(k => d.weather[k]), backgroundColor: brown }],
+    { plugins: { legend: { display: false } } });
+}
+
+async function pollLive() {
+  const status = document.getElementById("liveStatus");
+  try {
+    const d = await apiGet("/api/dashboard");
+    const sig = [d.record_count, d.total_rentals, d.total_casual, d.total_registered].join("|");
+    const changed = sig !== liveSignature;
+    liveData = d;
+    const now = new Date().toLocaleTimeString();
+    if (changed) {
+      const first = liveSignature === null;
+      liveSignature = sig;
+      renderLive();
+      status.textContent = first ? t("live_checked", { time: now }) : t("live_changed", { time: now });
+    } else {
+      status.textContent = t("live_checked", { time: now });
+    }
+    status.style.color = "";
+  } catch (e) {
+    status.textContent = t("live_error", { err: e.message });
+    status.style.color = "var(--danger, #b83a3a)";
+  }
+}
+setInterval(() => { if (!document.hidden) pollLive(); }, LIVE_REFRESH_MS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
+document.addEventListener("i18n:changed", renderLive);
+pollLive();
+
 let viz;
 
 // The published dashboards are fixed-size (1366 x 768 in the workbook). Tableau does not scale a
@@ -142,6 +247,41 @@ async function initDashboard() {
 document.getElementById("btnUpdateCharts").addEventListener("click", updateCharts);
 document.getElementById("tableauUrl").addEventListener("keydown", (e) => { if (e.key === "Enter") updateCharts(); });
 window.addEventListener("resize", layoutViz);
+function fmtTime(iso) { return iso ? iso.replace("T", " ") : "—"; }
+
+async function loadPipelineStatus() {
+  const box = document.getElementById("pipelineStatus");
+  try {
+    const st = await apiGet("/api/tableau/status");
+    const last = st.last_run;
+    const f = st.files;
+    let html = "";
+    if (!last) {
+      html += `<div>${t("pipe_never")}</div>`;
+    } else if (last.status === "success") {
+      html += `<div>✅ ${t("pipe_ok", { time: last.event_time, rows: fmtNumber(last.records_synced) })}</div>`;
+    } else {
+      html += `<div style="color:var(--danger,#b83a3a)">⚠ ${t("pipe_err", { err: last.message })}</div>`;
+    }
+    html += `<div>${t("pipe_files")}: ${["hyper", "twb", "twbx"].map(k =>
+      `<code>${f[k].name}</code> ${f[k].exists ? "(" + fmtTime(f[k].modified) + ")" : "(" + t("pipe_missing") + ")"}`).join(" · ")}</div>`;
+    box.innerHTML = html;
+  } catch (e) { box.textContent = t("tbl_status_error", { err: e.message }); }
+}
+
+async function refreshPipeline() {
+  const btn = document.getElementById("btnRefreshPipeline");
+  btn.disabled = true;
+  document.getElementById("pipelineStatus").textContent = t("pipe_running");
+  try { await apiSend("/api/tableau/refresh", "POST", {}); }
+  catch (e) { /* the failure text is shown by loadPipelineStatus() from the sync log */ }
+  await loadPipelineStatus();
+  btn.disabled = false;
+}
+document.getElementById("btnRefreshPipeline").addEventListener("click", refreshPipeline);
+loadPipelineStatus();
+document.addEventListener("i18n:changed", loadPipelineStatus);
+
 layoutViz();
 initDashboard();
 </script>

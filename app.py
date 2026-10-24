@@ -24,9 +24,15 @@ API endpoints used by the pages' JS (static/js/main.js):
   GET    /export/tableau-xlsx       downloads Bike_Sharing_Tableau_Data.xlsx (Tableau update file)
   GET    /api/tableau-url           saved Tableau Public dashboard URL
   POST   /api/tableau-url           save the Tableau Public dashboard URL
+  POST   /api/tableau/refresh       run Excel -> .hyper -> .twb/.twbx now (Dashboard "Refresh" button)
+  GET    /api/tableau/status        state of the last pipeline run + generated files
+  GET    /export/tableau-workbook   downloads Project_data_Analysis.twbx (twb + hyper) for publishing
+  GET    /export/tableau-hyper      downloads Bike_Sharing.hyper
 """
 
 from flask import Flask, render_template, request, jsonify, send_file
+import os
+import threading
 import sqlite3
 import datetime
 from urllib.parse import urlparse
@@ -73,6 +79,28 @@ def auto_sync_after_change(action, instant=None):
                   message=f"Record {action} (id={instant}); analysis recalculated.")
     except Exception as e:
         log_sync("auto_sync", "error", records_synced=0, message=str(e))
+    refresh_tableau_files(f"Record {action} (id={instant})")
+
+
+_pipeline_lock = threading.Lock()   # only one Excel -> .hyper -> .twb run at a time
+
+
+def refresh_tableau_files(reason):
+    """Dashboard pipeline: Excel file -> .hyper -> .twb/.twbx (see tableau_sync.py).
+    Never raises: a failure is logged on the Data Update Status page and the save itself still succeeds.
+    Runs are serialized: two overlapping runs used to overwrite the Excel file while the other was
+    reading it ("Bad CRC-32" errors in the sync log)."""
+    try:
+        import tableau_sync                       # needs the 'tableauhyperapi' package
+        with _pipeline_lock:
+            excel_path, _ = analytics.export_tableau_xlsx()      # the Excel file
+            result = tableau_sync.run_pipeline(excel_path)       # Excel -> .hyper -> .twb -> .twbx
+        log_sync("tableau_sync", "success", records_synced=result["rows"],
+                  message=f"{reason}: Excel -> Bike_Sharing.hyper -> Project_data_Analysis.twb/.twbx updated.")
+        return result
+    except Exception as e:
+        log_sync("tableau_sync", "error", message=f"{reason}: {e}")
+        return {"error": str(e)}
 
 
 # ---------------- Page routes ----------------
@@ -208,6 +236,21 @@ def validate_payload(data):
             errors.append("Hour must be between 0 and 23")
     except (TypeError, ValueError):
         errors.append("Hour must be an integer 0-23")
+
+    # holiday / workingday consistency (same rule as the original dataset):
+    #   workingday = 1  <=>  Monday-Friday and not a public holiday
+    try:
+        holiday, workingday, weekday = int(data.get("holiday")), int(data.get("workingday")), int(data.get("weekday"))
+        expected = 1 if (1 <= weekday <= 5 and holiday == 0) else 0
+        if workingday != expected:
+            if holiday == 1:
+                errors.append("A public holiday cannot be a working day.")
+            elif weekday in (0, 6):
+                errors.append("Saturdays and Sundays cannot be working days.")
+            else:
+                errors.append("A normal Monday-Friday that is not a public holiday must be a working day.")
+    except (TypeError, ValueError):
+        pass  # missing/invalid values are reported by the checks above
 
     bounds = {
         "temp_c": (0, 41), "atemp_c": (0, 50), "hum_pct": (0, 100),
@@ -450,6 +493,52 @@ def api_set_tableau_url():
     conn.commit()
     conn.close()
     return jsonify({"success": True, "url": url})
+
+
+# ---------- Dashboard pipeline: Excel -> .hyper -> .twb ----------
+
+TABLEAU_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "tableau")
+
+
+@app.route("/api/tableau/refresh", methods=["POST"])
+def api_tableau_refresh():
+    result = refresh_tableau_files("Manual refresh")
+    if "error" in result:
+        return jsonify({"success": False, "error": result["error"]}), 500
+    return jsonify({"success": True, **result})
+
+
+@app.route("/api/tableau/status")
+def api_tableau_status():
+    conn = get_conn()
+    last = conn.execute(
+        "SELECT event_time, status, records_synced, message FROM sync_log "
+        "WHERE event_type='tableau_sync' ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
+    files = {}
+    for key, name in (("hyper", "Bike_Sharing.hyper"), ("twb", "Project_data_Analysis.twb"),
+                      ("twbx", "Project_data_Analysis.twbx")):
+        path = os.path.join(TABLEAU_DIR, name)
+        files[key] = {"name": name, "exists": os.path.exists(path),
+                      "modified": datetime.datetime.fromtimestamp(os.path.getmtime(path)).isoformat(timespec="seconds")
+                      if os.path.exists(path) else None}
+    return jsonify({"last_run": dict(last) if last else None, "files": files})
+
+
+@app.route("/export/tableau-workbook")
+def export_tableau_workbook():
+    path = os.path.join(TABLEAU_DIR, "Project_data_Analysis.twbx")
+    if not os.path.exists(path):
+        refresh_tableau_files("Download requested")
+    return send_file(path, as_attachment=True, download_name="Project_data_Analysis.twbx")
+
+
+@app.route("/export/tableau-hyper")
+def export_tableau_hyper():
+    path = os.path.join(TABLEAU_DIR, "Bike_Sharing.hyper")
+    if not os.path.exists(path):
+        refresh_tableau_files("Download requested")
+    return send_file(path, as_attachment=True, download_name="Bike_Sharing.hyper")
 
 
 if __name__ == "__main__":
