@@ -65,6 +65,10 @@ h1, h2, h3, .brand, nav a, .btn, .kpi .value { font-family: 'Kanit', 'Prompt', s
 .content { max-width: 1200px; margin: 0 auto; padding: 24px 20px 60px; }
 .content.full-width { max-width: none; }
 .tableau-card { padding: 12px; }
+.tableau-page { max-width: 1600px; margin: 0 auto; }
+.tableau-page tableau-viz { display: block; width: 100%; min-height: 70vh; }
+.tableau-help { color: var(--muted); }
+.tableau-config-notice { max-width: 720px; }
 
 .footer {
   text-align: center;

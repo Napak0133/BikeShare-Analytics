@@ -20,6 +20,7 @@ import sqlite3
 
 import datastore
 import hyperstore
+import tableau_sync
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DB = os.path.join(BASE_DIR, "logs", "sync_log.db")
@@ -88,9 +89,32 @@ def ensure_fresh(reason="Excel file changed"):
             raise
 
 
+def publish_tableau(n):
+    """Publish the latest app Hyper extract to Tableau Cloud when configured."""
+    try:
+        published = tableau_sync.publish_to_tableau_cloud(hyperstore.HYPER_PATH)
+        if published is None:
+            message = (
+                "Tableau Cloud publishing is not configured; Excel and website charts "
+                "were updated, but Tableau Cloud was not."
+            )
+            log("tableau_publish", "skipped", n, message)
+            return message
+        message = (
+            f"Published workbook {published['workbook_name']} "
+            f"({published['workbook_id']}) to Tableau Cloud."
+        )
+        log("tableau_publish", "success", n, message)
+        return None
+    except Exception as e:
+        message = f"Tableau Cloud publish failed: {e}"
+        log("tableau_publish", "error", n, message)
+        return message
+
+
 def commit(action, instant, mutate):
-    """Run `mutate()` (it writes the Excel file), then rebuild the .hyper.
-    Returns (result, warning). `warning` is set when Excel was saved but the .hyper refresh failed."""
+    """Save Excel, rebuild Hyper and publish to Cloud when configured.
+    Returns (result, warning); an external publish failure does not undo the saved record."""
     with lock:
         try:
             result = mutate()
@@ -100,10 +124,17 @@ def commit(action, instant, mutate):
         ident = result if action == "add" else instant      # a new record's id is only known now
         try:
             n = rebuild_hyper()
-            log(action, "success", 1,
-                f"id={ident}: saved to Web_Entries in Bike_Sharing_Analysis_Final.xlsx; "
-                f"Bike_Sharing.hyper rebuilt ({n:,} rows); charts updated.")
-            return result, None
         except Exception as e:
             log(action, "error", 1, f"id={ident}: saved to Excel, but the .hyper refresh failed: {e}")
             return result, f"Saved to Excel, but the charts could not be refreshed: {e}"
+        warning = publish_tableau(n)
+        message = (
+            f"id={ident}: saved to Web_Entries in Bike_Sharing_Analysis_Final.xlsx; "
+            f"Bike_Sharing.hyper rebuilt ({n:,} rows); website charts updated."
+        )
+        if warning:
+            message += f" {warning}"
+        else:
+            message += " Tableau Cloud workbook published."
+        log(action, "success", 1, message)
+        return result, warning

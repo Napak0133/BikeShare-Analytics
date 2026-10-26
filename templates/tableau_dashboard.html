@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Tableau Cloud — BikeShare Analytics{% endblock %}
+{% block content %}
+<section class="tableau-page">
+  <h1 data-i18n="tableau_title">Tableau Cloud Dashboard</h1>
+  {% if tableau_view_url and tableau_embed_token %}
+    <p class="tableau-help" data-i18n="tableau_login_note">
+      This view is embedded using the configured Tableau account.
+    </p>
+    <script type="module" src="{{ tableau_embed_script_url }}"></script>
+    <tableau-viz
+      src="{{ tableau_view_url }}"
+      token="{{ tableau_embed_token }}"
+      toolbar="bottom"
+      hide-tabs
+      width="100%"
+      height="850">
+    </tableau-viz>
+  {% elif tableau_view_url %}
+    <div class="card tableau-config-notice">
+      <h2 data-i18n="tableau_embed_not_ready">Tableau embedding is not configured</h2>
+      <p>{{ tableau_embed_error }}</p>
+    </div>
+  {% else %}
+    <div class="card tableau-config-notice">
+      <h2 data-i18n="tableau_not_configured">Tableau view is not configured</h2>
+      <p data-i18n="tableau_config_hint">
+        Set TABLEAU_VIEW_URL to the full URL of the published dashboard view, then restart the app.
+      </p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

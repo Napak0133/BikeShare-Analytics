@@ -5,8 +5,7 @@ Dashboard update pipeline:
 
     (a) Excel file  ->  .hyper extract      (Tableau Hyper API)
     (b) .hyper      ->  .twb workbook       (the workbook's data source is re-pointed to the .hyper)
-    (c) .twb + .hyper are zipped into a .twbx that can be opened / published, and the
-        Dashboard page shows the charts of the published workbook.
+    (c) .twb + .hyper are zipped into a .twbx for publishing to Tableau Cloud.
 
 Files (all under static/tableau/):
     template/Project_data_Analysis.twb   original workbook from Tableau (never modified)
@@ -26,17 +25,20 @@ import os
 import shutil
 import zipfile
 
-import openpyxl
+from dotenv import load_dotenv
 from lxml import etree
 from tableauhyperapi import (
     Connection, CreateMode, HyperProcess, Inserter, SqlType, TableDefinition,
     TableName, Telemetry,
 )
 
+load_dotenv()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TABLEAU_DIR = os.path.join(BASE_DIR, "static", "tableau")
 TEMPLATE_TWB = os.path.join(TABLEAU_DIR, "template", "Project_data_Analysis.twb")
 HYPER_PATH = os.path.join(TABLEAU_DIR, "Bike_Sharing.hyper")
+APP_HYPER_PATH = os.path.join(BASE_DIR, "data", "Bike_Sharing.hyper")
 TWB_PATH = os.path.join(TABLEAU_DIR, "Project_data_Analysis.twb")
 TWBX_PATH = os.path.join(TABLEAU_DIR, "Project_data_Analysis.twbx")
 DEFAULT_EXCEL = os.path.join(BASE_DIR, "exports", "Bike_Sharing_Tableau_Data.xlsx")
@@ -62,6 +64,8 @@ FLOAT_COLS = {"temp", "atemp", "hum", "windspeed"}
 def _read_excel_rows(excel_path):
     """Read the dataset rows from the Excel file. Uses the 'Tableau_Data' sheet when it exists,
     otherwise the first sheet. Blank rows are skipped (they would otherwise become all-NULL rows)."""
+    import openpyxl
+
     wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
     ws = wb["Tableau_Data"] if "Tableau_Data" in wb.sheetnames else wb.worksheets[0]
     it = ws.iter_rows(values_only=True)
@@ -164,6 +168,20 @@ def patch_twb(template_twb=TEMPLATE_TWB, out_twb=TWB_PATH, hyper_ref=HYPER_ARCHI
                                           "table": "[Extract].[Extract]", "type": "table"})
     conn.replace(conn.find("relation"), table_relation())
 
+    # Tableau stores a second extract connection under <extract>. Repoint it too;
+    # otherwise Cloud may try to open the stale Hyper path from the source workbook.
+    extract = ds.find("extract")
+    extract_conn = extract.find("connection") if extract is not None else None
+    if extract_conn is not None:
+        extract_conn.set("dbname", hyper_ref)
+        extract_conn.set("schema", "Extract")
+        extract_conn.set("tablename", "Extract")
+        extract_relation = extract_conn.find("relation")
+        if extract_relation is not None:
+            extract_relation.set("name", "Extract")
+            extract_relation.set("table", "[Extract].[Extract]")
+            extract_relation.set("type", "table")
+
     # 2. metadata: columns now come from [Extract]; drop the Excel-only helper columns
     keep = {n for n, _ in COLUMNS}
     meta = conn.find("metadata-records")
@@ -206,23 +224,132 @@ def package_twbx(twb_path=TWB_PATH, hyper_path=HYPER_PATH, out_twbx=TWBX_PATH):
     return out_twbx
 
 
+def package_app_hyper(
+    hyper_path=APP_HYPER_PATH,
+    template_twb=TEMPLATE_TWB,
+    twb_path=TWB_PATH,
+    out_twbx=TWBX_PATH,
+):
+    """Package the app's latest Hyper extract with the Tableau workbook template."""
+    if not os.path.isfile(hyper_path):
+        raise FileNotFoundError(f"App Hyper extract not found: {hyper_path}")
+    patch_twb(template_twb, twb_path)
+    problems = validate_workbook(twb_path, hyper_path)
+    if problems:
+        raise RuntimeError("; ".join(problems))
+    return package_twbx(twb_path, hyper_path, out_twbx)
+
+
 def validate_workbook(twb_path=TWB_PATH, hyper_path=HYPER_PATH):
     """Cheap safety checks: every field the worksheets use exists in the .hyper and no Excel link is left."""
     text = open(twb_path, encoding="utf-8").read()
     problems = []
     if "excel-direct" in text:
         problems.append("workbook still references the Excel connection")
+    root = etree.fromstring(text.encode("utf-8"))
+    ds = _federated_datasource(root)
+    hyper_connections = [
+        conn for conn in ds.iter("connection") if conn.get("class") == "hyper"
+    ]
+    if not hyper_connections:
+        problems.append("workbook has no Hyper connection")
+    for conn in hyper_connections:
+        if conn.get("dbname") != HYPER_ARCHIVE_PATH:
+            problems.append(
+                f"workbook Hyper connection points to {conn.get('dbname')!r}, "
+                f"expected {HYPER_ARCHIVE_PATH!r}"
+            )
     with HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU, parameters={"log_config": ""}) as hyper:
         with Connection(hyper.endpoint, hyper_path) as conn:
             cols = {c.name.unescaped for c in conn.catalog.get_table_definition(HYPER_TABLE).columns}
-    root = etree.fromstring(text.encode("utf-8"))
-    ds = _federated_datasource(root)
     meta = {r.findtext("remote-name") for r in ds.find("connection/metadata-records") if r.get("class") == "column"}
     if meta - cols:
         problems.append(f"workbook fields not in .hyper: {sorted(meta - cols)}")
     if cols - meta:
         problems.append(f".hyper columns unknown to workbook: {sorted(cols - meta)}")
     return problems
+
+
+def tableau_cloud_config():
+    """Return Tableau Cloud settings when PAT credentials are configured."""
+    token_name = os.environ.get("TABLEAU_PAT_NAME")
+    token_secret = os.environ.get("TABLEAU_PAT_SECRET")
+    if not token_name and not token_secret:
+        return None
+    if not token_name or not token_secret:
+        raise RuntimeError("Set both TABLEAU_PAT_NAME and TABLEAU_PAT_SECRET.")
+    return {
+        "server_url": os.environ.get(
+            "TABLEAU_SERVER_URL", "https://prod-apsoutheast-b.online.tableau.com"
+        ).rstrip("/"),
+        "site_content_url": os.environ.get(
+            "TABLEAU_SITE_CONTENT_URL", "thanatchanunboonkasem-8b976e5748"
+        ),
+        "token_name": token_name,
+        "token_secret": token_secret,
+        "project_name": os.environ.get("TABLEAU_PROJECT_NAME", "Bike-Sharing-Project"),
+        "workbook_name": os.environ.get("TABLEAU_WORKBOOK_NAME", "Project_data_Analysis"),
+    }
+
+
+def publish_to_tableau_cloud(hyper_path=APP_HYPER_PATH):
+    """Publish the app's latest extract by overwriting its existing Cloud workbook.
+
+    Returns None when publishing is not configured. The workbook template must be the
+    version whose dashboard layout should be retained on Tableau Cloud.
+    """
+    config = tableau_cloud_config()
+    if config is None:
+        return None
+
+    try:
+        import tableauserverclient as TSC
+    except ImportError as exc:
+        raise RuntimeError(
+            "Tableau Cloud publishing requires tableauserverclient; install requirements.txt."
+        ) from exc
+
+    twbx_path = package_app_hyper(hyper_path)
+    server = TSC.Server(config["server_url"], use_server_version=True)
+    auth = TSC.PersonalAccessTokenAuth(
+        config["token_name"],
+        config["token_secret"],
+        site_id=config["site_content_url"],
+    )
+
+    server.auth.sign_in(auth)
+    try:
+        projects = [
+            project for project in TSC.Pager(server.projects)
+            if project.name == config["project_name"]
+        ]
+        if len(projects) != 1:
+            raise RuntimeError(
+                f"Expected one Tableau project named {config['project_name']!r}; "
+                f"found {len(projects)}."
+            )
+        project = projects[0]
+
+        existing = [
+            workbook for workbook in TSC.Pager(server.workbooks)
+            if workbook.name == config["workbook_name"] and workbook.project_id == project.id
+        ]
+        if len(existing) != 1:
+            raise RuntimeError(
+                f"Expected one existing workbook named {config['workbook_name']!r} "
+                f"in project {config['project_name']!r}; found {len(existing)}. "
+                "Refusing to create or overwrite an ambiguous workbook."
+            )
+
+        workbook = TSC.WorkbookItem(project_id=project.id, name=config["workbook_name"])
+        published = server.workbooks.publish(
+            workbook,
+            twbx_path,
+            mode=TSC.Server.PublishMode.Overwrite,
+        )
+        return {"workbook_id": published.id, "workbook_name": published.name}
+    finally:
+        server.auth.sign_out()
 
 
 def run_pipeline(excel_path=DEFAULT_EXCEL):
