@@ -28,14 +28,19 @@ API (used by static/js/main.js and the page scripts)
 """
 
 import datetime
+import os
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, send_file
+
+load_dotenv()
 
 import analytics
 import datastore
 import hyperstore
 import models
 import pipeline
+from tableau_embed import TableauEmbedConfigError, create_embed_token
 
 app = Flask(__name__)
 
@@ -59,6 +64,31 @@ def excel_locked(e):
 @app.route("/")
 def dashboard():
     return render_template("dashboard.html", active="dashboard")
+
+
+@app.route("/tableau")
+def tableau_dashboard():
+    server_url = os.environ.get(
+        "TABLEAU_SERVER_URL", "https://prod-apsoutheast-b.online.tableau.com"
+    ).rstrip("/")
+    view_url = os.environ.get("TABLEAU_VIEW_URL", "").strip()
+    embed_token = None
+    embed_error = None
+    if view_url:
+        try:
+            embed_token = create_embed_token()
+        except TableauEmbedConfigError as exc:
+            embed_error = str(exc)
+    return render_template(
+        "tableau_dashboard.html",
+        active="tableau",
+        tableau_view_url=view_url,
+        tableau_embed_token=embed_token,
+        tableau_embed_error=embed_error,
+        tableau_embed_script_url=(
+            f"{server_url}/javascripts/api/tableau.embedding.3.latest.min.js"
+        ),
+    )
 
 
 @app.route("/data")
@@ -344,12 +374,18 @@ def api_analysis():
 
 @app.route("/api/analysis/update", methods=["POST"])
 def api_analysis_update():
-    """'Re-sync now': read the Excel file again and rebuild the .hyper."""
+    """'Re-sync now': rebuild the .hyper from Excel and publish to Tableau Cloud when configured."""
     try:
         with pipeline.lock:
             n = pipeline.rebuild_hyper()
-            pipeline.log("manual_sync", "success", n, "Manual re-sync: .hyper rebuilt from the Excel file.")
-        return jsonify({"success": True, "records": n})
+            warning = pipeline.publish_tableau(n)
+            message = "Manual re-sync: .hyper rebuilt from the Excel file."
+            if warning:
+                message += f" {warning}"
+            else:
+                message += " Tableau Cloud workbook published."
+            pipeline.log("manual_sync", "success", n, message)
+        return jsonify({"success": True, "records": n, "warning": warning})
     except Exception as e:
         pipeline.log("manual_sync", "error", 0, str(e))
         return jsonify({"success": False, "error": str(e)}), 500

@@ -4,12 +4,16 @@
 
 const I18N = {
   en: {
-    nav_dashboard: "Dashboard", nav_data: "Data Management", nav_add: "Add / Edit",
+    nav_dashboard: "Dashboard", nav_tableau: "Tableau Cloud", nav_data: "Data Management", nav_add: "Add / Edit",
     nav_analysis: "Analysis Results", nav_status: "Update Status",
     footer: "BikeShare Analytics — Bike Sharing Dataset, Washington D.C. 2011–2012 (UCI ML Repository)",
 
     live_title: "Charts", live_source: "Source: Excel workbook → Bike_Sharing.hyper · {rows} records · updated {time}", live_hint: "The charts are drawn from Bike_Sharing.hyper. Every time a record is added, edited or deleted, the website saves it in the Excel workbook, rebuilds the .hyper from that workbook and redraws these charts straight away.",
     live_changed: "Data changed — charts updated", live_error: "Could not load live data: {err}",
+    tableau_title: "Tableau Cloud Dashboard",
+    tableau_login_note: "Embedded through the enabled Tableau Connected App as the configured Tableau user.",
+    tableau_not_configured: "Tableau view is not configured",
+    tableau_config_hint: "Set TABLEAU_VIEW_URL to the full URL of the published dashboard view, then restart the app.",
     live_kpi_total: "Total Rentals", live_kpi_avg: "Avg Rentals / Hour", live_kpi_casual: "Casual Users", live_kpi_registered: "Registered Users", live_kpi_records: "Records",
     live_ch_monthly: "Monthly rentals", live_ch_hourly: "Rentals by hour of day", live_ch_season: "Rentals by season", live_ch_weather: "Rentals by weather",
     dash_title: "Dashboard", dash_sub: "Overview of bike-sharing rentals. The charts update immediately when data is added, edited or deleted.",
@@ -101,12 +105,16 @@ const I18N = {
     msg_update_fail: "Update failed: {err}. You can retry.",
   },
   th: {
-    nav_dashboard: "แดชบอร์ด", nav_data: "จัดการข้อมูล", nav_add: "เพิ่ม / แก้ไข",
+    nav_dashboard: "แดชบอร์ด", nav_tableau: "Tableau Cloud", nav_data: "จัดการข้อมูล", nav_add: "เพิ่ม / แก้ไข",
     nav_analysis: "ผลการวิเคราะห์", nav_status: "สถานะการอัปเดต",
     footer: "BikeShare Analytics — ชุดข้อมูลการเช่าจักรยาน กรุงวอชิงตัน ดี.ซี. 2011–2012 (UCI ML Repository)",
 
     live_title: "แผนภูมิ", live_source: "แหล่งข้อมูล: ไฟล์ Excel → Bike_Sharing.hyper · {rows} รายการ · อัปเดตเมื่อ {time}", live_hint: "แผนภูมิเหล่านี้สร้างจากไฟล์ Bike_Sharing.hyper ทุกครั้งที่เพิ่ม แก้ไข หรือลบข้อมูล เว็บไซต์จะบันทึกลงไฟล์ Excel สร้างไฟล์ .hyper ใหม่จาก Excel แล้ววาดแผนภูมิใหม่ทันที",
     live_changed: "ข้อมูลเปลี่ยนแปลง — อัปเดตแผนภูมิแล้ว", live_error: "โหลดข้อมูลสดไม่ได้: {err}",
+    tableau_title: "แดชบอร์ด Tableau Cloud",
+    tableau_login_note: "ฝังผ่าน Tableau Connected App ที่เปิดใช้งาน โดยใช้บัญชี Tableau ที่ตั้งค่าไว้",
+    tableau_not_configured: "ยังไม่ได้ตั้งค่า Tableau view",
+    tableau_config_hint: "ตั้งค่า TABLEAU_VIEW_URL เป็น URL เต็มของ dashboard ที่ publish แล้ว จากนั้นเริ่มแอปใหม่",
     live_kpi_total: "จำนวนการเช่าทั้งหมด", live_kpi_avg: "เฉลี่ยการเช่า/ชั่วโมง", live_kpi_casual: "ผู้ใช้ทั่วไป", live_kpi_registered: "สมาชิก", live_kpi_records: "จำนวนข้อมูล",
     live_ch_monthly: "การเช่ารายเดือน", live_ch_hourly: "การเช่าตามชั่วโมง", live_ch_season: "การเช่าตามฤดูกาล", live_ch_weather: "การเช่าตามสภาพอากาศ",
     dash_title: "แดชบอร์ด", dash_sub: "ภาพรวมการเช่าจักรยาน แผนภูมิจะอัปเดตทันทีเมื่อมีการเพิ่ม แก้ไข หรือลบข้อมูล",

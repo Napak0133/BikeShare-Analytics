@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 logs/
 data/*.tmp
+.env
+.env.*
+!.env.local.example
