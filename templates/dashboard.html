@@ -2,287 +2,468 @@
 {% block title %}Dashboard — BikeShare Analytics{% endblock %}
 {% block main_class %}full-width{% endblock %}
 {% block content %}
-<div style="max-width:1600px;margin:0 auto">
-<div>
-  <h1 data-i18n="dash_title">Dashboard</h1>
-  <p class="muted" data-i18n="dash_sub">Overview of bike-sharing rentals, powered by the Tableau dashboard below.</p>
-</div>
+<div class="ov-canvas">
+  <div class="ov-wrap">
 
-<div class="card" style="border-left:4px solid var(--navy)">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    <h2 style="margin:0" data-i18n="live_title">Live charts</h2>
-    <span id="liveStatus" class="muted" style="font-size:.82rem"></span>
+    <!-- Left sidebar: parameter controls + page buttons (same order as the Tableau dashboard) -->
+    <aside class="ov-side">
+      <div class="ov-controls">
+        <div class="ov-ctl"><label for="fYear" data-i18n="ov_year"></label><select id="fYear"></select></div>
+        <div class="ov-ctl"><label for="fUser" data-i18n="ov_user"></label>
+          <select id="fUser">
+            <option value="cnt" data-i18n="ov_all"></option>
+            <option value="casual" data-i18n="ov_user_casual"></option>
+            <option value="registered" data-i18n="ov_user_registered"></option>
+          </select></div>
+        <div class="ov-ctl"><label for="fDay" data-i18n="ov_day"></label>
+          <select id="fDay">
+            <option value="all" data-i18n="ov_all"></option>
+            <option value="weekday" data-i18n="ov_day_weekday"></option>
+            <option value="off" data-i18n="ov_day_off"></option>
+          </select></div>
+      </div>
+      <nav class="ov-nav">
+        <button class="ov-nav-btn active" type="button" data-view="overview" data-i18n="ov_nav_overview"></button>
+        <button class="ov-nav-btn" type="button" data-view="hour" data-i18n="ov_nav_hour"></button>
+        <button class="ov-nav-btn" type="button" data-view="weather" data-i18n="ov_nav_weather"></button>
+        <button class="ov-nav-btn" type="button" data-view="forecast" data-i18n="ov_nav_forecast"></button>
+        <button class="ov-nav-btn" type="button" data-view="whatif" data-i18n="ov_nav_whatif"></button>
+      </nav>
+    </aside>
+
+    <section class="ov-main">
+      <!-- Title banner -->
+      <div class="ov-title"><b data-i18n="ov_title"></b></div>
+
+      <div class="ov-view active" id="v-overview">
+      <!-- KPI block: left = Total + YoY + Hourly Record, right = Casual + Registered -->
+      <div class="ov-kpis">
+        <div class="ov-col">
+          <div class="ov-card ov-total">
+            <div class="lbl" data-i18n="ov_total"></div>
+            <div class="big" id="kTotal">–</div>
+            <div class="sub" id="kPrior"></div>
+          </div>
+          <div class="ov-yoy" id="kYoy">–</div>
+          <div class="ov-card ov-record">
+            <div class="lbl" data-i18n="ov_hourly_record"></div>
+            <div class="big" id="kRecords">–</div>
+            <div class="sub" id="kPeak"></div>
+          </div>
+        </div>
+        <div class="ov-col">
+          <div class="ov-card ov-casual" id="cardCasual">
+            <div class="lbl" data-i18n="ov_casual_rentals"></div>
+            <div class="big" id="kCasual">–</div>
+            <div class="sub" id="kCasualPct"></div>
+          </div>
+          <div class="ov-card ov-registered" id="cardRegistered">
+            <div class="lbl" data-i18n="ov_registered_rentals"></div>
+            <div class="big" id="kRegistered">–</div>
+            <div class="sub" id="kRegisteredPct"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom row: User Type Ratio | Day Type AVG Rental | Monthly Trend -->
+      <div class="ov-charts">
+        <div class="ov-chart"><h3 data-i18n="ov_ch_ratio"></h3><div class="box"><canvas id="chRatio"></canvas></div></div>
+        <div class="ov-chart"><h3 data-i18n="ov_ch_daytype"></h3><div class="box"><canvas id="chDay"></canvas></div></div>
+        <div class="ov-chart"><h3 data-i18n="ov_ch_monthly"></h3><div class="box"><canvas id="chMonthly"></canvas></div></div>
+      </div>
+      </div>
+
+      <!-- Hour -->
+      <div class="ov-view" id="v-hour">
+        <div class="ov-krow">
+          <div class="ov-card ov-k1"><div class="lbl" data-i18n="hr_peak"></div><div class="big" id="hPeak">–</div><div class="sub" id="hPeakSub"></div></div>
+          <div class="ov-card ov-k2"><div class="lbl" data-i18n="hr_quiet"></div><div class="big" id="hQuiet">–</div><div class="sub" id="hQuietSub"></div></div>
+          <div class="ov-card ov-k3"><div class="lbl" data-i18n="hr_rush"></div><div class="big" id="hRush">–</div><div class="sub" data-i18n="hr_rush_sub"></div></div>
+        </div>
+        <div class="ov-grid2">
+          <div class="ov-chart"><h3 data-i18n="hr_line"></h3><div class="box"><canvas id="chHourLine"></canvas></div></div>
+          <div class="ov-chart"><h3 data-i18n="hr_split"></h3><div class="box"><canvas id="chHourSplit"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Weather -->
+      <div class="ov-view" id="v-weather">
+        <div class="ov-krow">
+          <div class="ov-card ov-k1"><div class="lbl" data-i18n="wx_clear"></div><div class="big" id="wClear">–</div><div class="sub" data-i18n="wx_unit"></div></div>
+          <div class="ov-card ov-k2"><div class="lbl" data-i18n="wx_bad"></div><div class="big" id="wBad">–</div><div class="sub" id="wBadSub"></div></div>
+          <div class="ov-card ov-k3"><div class="lbl" data-i18n="wx_best"></div><div class="big" id="wBest">–</div><div class="sub" id="wBestSub"></div></div>
+        </div>
+        <div class="ov-grid2">
+          <div class="ov-chart"><h3 data-i18n="wx_sit"></h3><div class="box"><canvas id="chWxSit"></canvas></div></div>
+          <div class="ov-chart"><h3 data-i18n="wx_temp"></h3><div class="box"><canvas id="chWxTemp"></canvas></div></div>
+          <div class="ov-chart"><h3 data-i18n="wx_hum"></h3><div class="box"><canvas id="chWxHum"></canvas></div></div>
+          <div class="ov-chart"><h3 data-i18n="wx_wind"></h3><div class="box"><canvas id="chWxWind"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Forecast -->
+      <div class="ov-view" id="v-forecast">
+        <div class="ov-krow">
+          <div class="ov-card ov-k1"><div class="lbl" data-i18n="fc_total"></div><div class="big" id="fTotal">–</div><div class="sub" id="fTotalSub"></div></div>
+          <div class="ov-card ov-k2"><div class="lbl" data-i18n="fc_avg"></div><div class="big" id="fAvg">–</div><div class="sub" id="fYoy"></div></div>
+          <div class="ov-card ov-k3"><div class="lbl" data-i18n="fc_peak"></div><div class="big" id="fPeak">–</div><div class="sub" id="fPeakSub"></div></div>
+        </div>
+        <div class="ov-chart ov-wide">
+          <div class="hd"><h3 data-i18n="fc_title"></h3>
+            <select id="fcMonths"><option value="3"></option><option value="6"></option><option value="12" selected></option></select></div>
+          <div class="box"><canvas id="chForecast"></canvas></div>
+          <div class="ov-note" id="fNote"></div>
+        </div>
+      </div>
+
+      <!-- What-if -->
+      <div class="ov-view" id="v-whatif">
+        <div class="ov-wi">
+          <div class="ov-panel">
+            <div class="ov-field"><label><span data-i18n="wi_hour"></span><output id="oHour"></output></label><input type="range" id="wiHour" min="0" max="23" step="1" value="8"></div>
+            <div class="ov-field"><label><span data-i18n="wi_day"></span></label><select id="wiDay"></select></div>
+            <div class="ov-field"><label><span data-i18n="wi_weather"></span></label><select id="wiWeather"></select></div>
+            <div class="ov-field"><label><span data-i18n="wi_temp"></span><output id="oTemp"></output></label><input type="range" id="wiTemp" min="0" max="40" step="0.5" value="20"></div>
+            <div class="ov-field"><label><span data-i18n="wi_hum"></span><output id="oHum"></output></label><input type="range" id="wiHum" min="0" max="100" step="1" value="60"></div>
+            <div class="ov-field"><label><span data-i18n="wi_wind"></span><output id="oWind"></output></label><input type="range" id="wiWind" min="0" max="60" step="0.5" value="12"></div>
+            <div class="ov-field"><label><span data-i18n="wi_year"></span></label><select id="wiYear"></select></div>
+            <button type="button" class="ov-reset" id="wiReset" data-i18n="wi_reset"></button>
+          </div>
+          <div style="display:grid; gap:8px; min-width:0;">
+            <div class="ov-krow">
+              <div class="ov-card ov-k1"><div class="lbl" data-i18n="wi_pred"></div><div class="big" id="pTotal">–</div><div class="sub" id="pTotalSub"></div></div>
+              <div class="ov-card ov-k2"><div class="lbl" data-i18n="wi_vs"></div><div class="big" id="pVs">–</div><div class="sub" data-i18n="wi_vs_sub"></div></div>
+              <div class="ov-card ov-k3"><div class="lbl" data-i18n="wi_day_total"></div><div class="big" id="pDay">–</div><div class="sub" data-i18n="wi_day_sub"></div></div>
+            </div>
+            <div class="ov-chart ov-wide"><h3 data-i18n="wi_chart"></h3><div class="box"><canvas id="chWi"></canvas></div>
+              <div class="ov-note" id="wiNote"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
-  <p class="muted" style="font-size:.86rem;margin:6px 0 14px" data-i18n="live_hint"></p>
-  <div class="kpi-grid" id="liveKpis"></div>
-  <div class="chart-grid">
-    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_monthly"></h3><div style="position:relative;height:280px"><canvas id="chMonthly"></canvas></div></div>
-    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_hourly"></h3><div style="position:relative;height:280px"><canvas id="chHourly"></canvas></div></div>
-    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_season"></h3><div style="position:relative;height:280px"><canvas id="chSeason"></canvas></div></div>
-    <div class="card" style="margin:0"><h3 style="margin-top:0" data-i18n="live_ch_weather"></h3><div style="position:relative;height:280px"><canvas id="chWeather"></canvas></div></div>
-  </div>
 </div>
-
-<h2 style="margin:28px 0 12px" data-i18n="tbl_optional_title">Optional: Tableau workbook (Tableau Public)</h2>
-
-<div class="card" style="font-size:.86rem; border-left: 4px solid var(--brown)">
-  <strong data-i18n="tableau_refresh_title">About dashboard updates</strong>
-  <ol class="muted" style="margin:8px 0 0;padding-left:20px;line-height:1.7">
-    <li data-i18n="tbl_how_1"></li>
-    <li data-i18n="tbl_how_2"></li>
-    <li data-i18n="tbl_how_3"></li>
-  </ol>
-</div>
-
-<div class="card">
-  <h2 data-i18n="tbl_pipeline_title">Data pipeline: Excel → .hyper → .twb</h2>
-  <div id="pipelineStatus" class="muted" style="font-size:.88rem;line-height:1.7"></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-    <button class="btn secondary" id="btnRefreshPipeline" data-i18n="btn_refresh_pipeline" data-i18n-title="tt_refresh_pipeline">Refresh data now</button>
-    <a class="btn outline" href="/export/tableau-workbook" data-i18n="btn_dl_twbx" data-i18n-title="tt_dl_twbx">Download workbook (.twbx)</a>
-    <a class="btn outline" href="/export/tableau-hyper" data-i18n="btn_dl_hyper">Download extract (.hyper)</a>
-  </div>
-</div>
-
-<div class="card">
-  <h2 data-i18n="tbl_update_title">Show the published charts</h2>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <strong style="font-size:.88rem" data-i18n="tbl_step2">Tableau Public dashboard URL:</strong>
-    <input type="url" id="tableauUrl" style="flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--border, #ccc);border-radius:6px;font:inherit"
-           data-i18n-ph="ph_tableau_url" placeholder="https://public.tableau.com/...">
-    <button class="btn secondary" id="btnUpdateCharts" data-i18n="btn_update_charts" data-i18n-title="tt_update_charts">Update Charts</button>
-  </div>
-  <div id="urlStatus" class="muted" style="font-size:.82rem;margin-top:8px"></div>
-</div>
-
-<div class="card tableau-card" style="background: var(--bg); border-color: var(--accent);">
-  <div id="vizHolder" style="width:100%">
-    <div id="vizWrap" style="margin:0 auto;overflow:hidden;position:relative">
-      <div id="vizContainer" style="transform-origin:top left"></div>
-    </div>
-  </div>
-  <p class="muted" style="margin-top:12px;font-size:.8rem" data-i18n="tableau_switch_hint">
-    Use the tabs inside the dashboard above to switch between Overview, Time, Weather, What-if and Forecasting.
-  </p>
-</div>
-
-</div>
+<div class="ov-status muted" id="liveStatus"></div>
 {% endblock %}
 
 {% block scripts %}
-<script src='https://public.tableau.com/javascripts/api/tableau-2.min.js'></script>
-<script type='text/javascript'>
-// ---------------------------------------------------------------- live charts (auto-refresh)
-const LIVE_REFRESH_MS = 5000;
-const SEASON_I18N = { "Spring": "f_spring", "Summer": "f_summer", "Fall": "f_fall", "Winter": "f_winter" };
-const WEATHER_I18N = { "Clear": "f_clear", "Mist/Cloudy": "f_mist", "Light Rain/Snow": "f_rain", "Severe Weather": "f_severe" };
+<script>
+// Flow: add/edit/delete -> Excel workbook -> Bike_Sharing.hyper rebuilt -> the /api/* endpoints query the .hyper.
+// The page asks /api/version every 2 s and redraws the open view as soon as the version changes.
+// Year / User Type / Day Type work like the Tableau parameters; the five buttons on the left switch views.
+const CHECK_MS = 2000;
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const liveCharts = {};
-let liveData = null, liveSignature = null;
+const YEAR_COLORS = { 2011: "#8074a8", 2012: "#ffbed1" };          // Monthly Trend colours from the workbook
+const EXTRA_YEAR_COLORS = ["#76b7b2", "#f28e2b", "#9c9290"];
+const DAY_COLORS = { weekday: "#ffbed1", off: "#b173a0" };         // Weekday / Holiday-Weekend colours
+const USER_COLORS = { casual: "#499894", registered: "#f1ce63" };
+const WEATHER_COLORS = { 1: "#f1ce63", 2: "#a0cbe8", 3: "#4e8fbf", 4: "#8074a8" };
+const ENDPOINT = { overview: "/api/overview", hour: "/api/hour", weather: "/api/weather", forecast: "/api/forecast", whatif: "/api/whatif" };
+// Filters that a view does not use are greyed out (Forecast uses all years; What-if has its own inputs).
+const LOCKED = { overview: [], hour: [], weather: [], forecast: ["fYear", "fDay"], whatif: ["fYear", "fUser", "fDay"] };
+const charts = {};
+let view = "overview", data = null, shownVersion = null, busy = false, pending = false, firstLoad = true;
 
-function upsertChart(id, type, labels, datasets, opts) {
-  if (liveCharts[id]) {
-    const c = liveCharts[id];
-    c.data.labels = labels; c.data.datasets = datasets;
-    c.update("none");
-    return;
+const $ = id => document.getElementById(id);
+const fmtK = n => (n / 1000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "K";
+const hh = h => String(h).padStart(2, "0") + ":00";
+const pctTxt = p => (p >= 0 ? "+" : "") + p.toFixed(1);
+const wxName = id => t({ 1: "f_clear", 2: "f_mist", 3: "f_rain", 4: "f_severe" }[id]);
+
+// Tiny plugin: writes the value above each bar / point so the charts read like the Tableau ones.
+const valueLabels = {
+  id: "valueLabels",
+  afterDatasetsDraw(chart, _a, opts) {
+    if (!opts || !opts.show) return;
+    const ctx = chart.ctx; ctx.save(); ctx.font = "600 11px Prompt, sans-serif"; ctx.fillStyle = "#333"; ctx.textAlign = "center";
+    chart.data.datasets.forEach((ds, i) => chart.getDatasetMeta(i).data.forEach((el, j) => {
+      const v = ds.data[j]; if (v === null || v === undefined) return;
+      ctx.fillText(Number(v).toLocaleString(), el.x, el.y - 6);
+    }));
+    ctx.restore();
   }
-  liveCharts[id] = new Chart(document.getElementById(id), {
-    type, data: { labels, datasets },
-    options: Object.assign({ responsive: true, maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }, opts || {}),
+};
+Chart.register(valueLabels);
+
+function upsert(id, config) {
+  if (charts[id]) { charts[id].destroy(); }     // rebuilt on every refresh: simplest way to follow filter / language changes
+  charts[id] = new Chart($(id), config);
+}
+const yTicks = { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } };
+
+function buildYearOptions(years) {
+  const sel = $("fYear"), keep = sel.value;
+  const opts = [`<option value="0">${t("ov_all")}</option>`].concat(years.map(y => `<option value="${y}">${y}</option>`));
+  sel.innerHTML = opts.join("");
+  if (firstLoad) {
+    // Tableau opens on 2012; fall back to the newest year if that one is missing.
+    sel.value = years.includes(2012) ? "2012" : String(years[years.length - 1] || 0);
+  } else if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+// ------------------------------------------------------------------ Overview
+function renderOverview(d) {
+  const na = t("ov_na");
+  $("kTotal").textContent = fmtK(d.total);
+  $("kPrior").textContent = d.prior !== null ? `${fmtK(d.prior)} ${t("ov_prior")}` : `${na} ${t("ov_prior")}`;
+
+  const y = $("kYoy");
+  if (d.yoy === null) { y.className = "ov-yoy"; y.innerHTML = `${na} <small>${t("ov_vs_py")}</small>`; }
+  else {
+    const up = d.yoy >= 0;
+    y.className = "ov-yoy " + (up ? "up" : "down");
+    y.innerHTML = `${up ? "▲ +" : "▼ "}${(d.yoy * 100).toFixed(1)}% <small>${t("ov_vs_py")}</small>`;
+  }
+  $("kRecords").textContent = fmtNumber(d.record_count);
+  $("kPeak").textContent = `${t("ov_peak")} ${fmtNumber(d.peak_per_hour)} ${t("ov_unit")}`;
+
+  $("kCasual").textContent = fmtNumber(d.casual);
+  $("kCasualPct").textContent = `${(d.casual_pct * 100).toFixed(1)}% ${t("ov_of_total")}`;
+  $("kRegistered").textContent = fmtNumber(d.registered);
+  $("kRegisteredPct").textContent = `${(d.registered_pct * 100).toFixed(1)}% ${t("ov_of_total")}`;
+  // Same rule as the workbook's "Card State": the card of the user type that is NOT selected is dimmed.
+  $("cardCasual").classList.toggle("dimmed", d.user === "registered");
+  $("cardRegistered").classList.toggle("dimmed", d.user === "casual");
+
+  // User Type Ratio (donut)
+  const names = [t("th_casual"), t("th_registered")];
+  const vals = [d.casual, d.registered], sum = vals[0] + vals[1];
+  upsert("chRatio", { type: "doughnut",
+    data: { labels: names, datasets: [{ data: vals, backgroundColor: [USER_COLORS.casual, USER_COLORS.registered], borderColor: "#fff", borderWidth: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: "58%",
+      plugins: { legend: { position: "bottom", labels: { generateLabels: c => c.data.labels.map((l, i) => ({
+          text: `${l}  ${fmtNumber(vals[i])} (${sum ? (vals[i] / sum * 100).toFixed(1) : 0}%)`,
+          fillStyle: c.data.datasets[0].backgroundColor[i], strokeStyle: "#fff", index: i })) } } } } });
+
+  // Day Type AVG Rental (bars; the Day Type filter keeps only the chosen bar)
+  const dayKeys = ["weekday", "off"].filter(k => d.daytype_avg[k] !== null);
+  upsert("chDay", { type: "bar",
+    data: { labels: dayKeys.map(k => t(k === "weekday" ? "ov_day_weekday" : "ov_day_off")),
+            datasets: [{ data: dayKeys.map(k => d.daytype_avg[k]), backgroundColor: dayKeys.map(k => DAY_COLORS[k]), borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 18 } },
+      plugins: { legend: { display: false }, valueLabels: { show: true } }, scales: { y: yTicks } } });
+
+  // Monthly Trend (one line per year, Jan–Dec)
+  const years = [...new Set(d.monthly.map(m => m.year))];
+  let extra = 0;
+  const sets = years.map(yr => {
+    const col = YEAR_COLORS[yr] || EXTRA_YEAR_COLORS[extra++ % EXTRA_YEAR_COLORS.length];
+    const byMonth = {}; d.monthly.filter(m => m.year === yr).forEach(m => byMonth[m.month] = m.value);
+    return { label: String(yr), data: MONTHS.map((_, i) => byMonth[i + 1] ?? null), borderColor: col, backgroundColor: col,
+             tension: .25, pointRadius: 3, spanGaps: false };
   });
+  upsert("chMonthly", { type: "line", data: { labels: MONTHS, datasets: sets },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" } }, scales: { y: yTicks } } });
 }
 
-function renderLive() {
-  const d = liveData; if (!d) return;
-  const kpi = (labelKey, value, accent) =>
-    `<div class="kpi${accent ? " accent" : ""}"><div class="label">${t(labelKey)}</div><div class="value">${value}</div></div>`;
-  document.getElementById("liveKpis").innerHTML =
-    kpi("live_kpi_total", fmtNumber(d.total_rentals)) +
-    kpi("live_kpi_avg", d.avg_per_hour, true) +
-    kpi("live_kpi_casual", fmtNumber(d.total_casual)) +
-    kpi("live_kpi_registered", fmtNumber(d.total_registered), true) +
-    kpi("live_kpi_records", fmtNumber(d.record_count));
-
-  const navy = "#326080", brown = "#b07a3c", green = "#4a9a6a";
-  upsertChart("chMonthly", "line",
-    d.monthly.map(m => `${MONTHS[m.month - 1]} ${m.year}`),
-    [{ label: t("th_casual"), data: d.monthly.map(m => m.casual), borderColor: brown, backgroundColor: brown, tension: .25 },
-     { label: t("th_registered"), data: d.monthly.map(m => m.registered), borderColor: navy, backgroundColor: navy, tension: .25 }]);
-  const hours = Object.keys(d.hourly);
-  upsertChart("chHourly", "bar", hours.map(h => h + ":00"),
-    [{ label: t("th_total_rentals"), data: hours.map(h => d.hourly[h]), backgroundColor: navy }],
-    { plugins: { legend: { display: false } } });
-  const seasons = Object.keys(SEASON_I18N).filter(k => k in d.season);
-  upsertChart("chSeason", "bar", seasons.map(k => t(SEASON_I18N[k] || k)),
-    [{ label: t("th_total_rentals"), data: seasons.map(k => d.season[k]), backgroundColor: green }],
-    { plugins: { legend: { display: false } } });
-  const weather = Object.keys(WEATHER_I18N).filter(k => k in d.weather);
-  upsertChart("chWeather", "bar", weather.map(k => t(WEATHER_I18N[k] || k)),
-    [{ label: t("th_total_rentals"), data: weather.map(k => d.weather[k]), backgroundColor: brown }],
-    { plugins: { legend: { display: false } } });
-}
-
-async function pollLive() {
-  const status = document.getElementById("liveStatus");
-  try {
-    const d = await apiGet("/api/dashboard");
-    const sig = [d.record_count, d.total_rentals, d.total_casual, d.total_registered].join("|");
-    const changed = sig !== liveSignature;
-    liveData = d;
-    const now = new Date().toLocaleTimeString();
-    if (changed) {
-      const first = liveSignature === null;
-      liveSignature = sig;
-      renderLive();
-      status.textContent = first ? t("live_checked", { time: now }) : t("live_changed", { time: now });
-    } else {
-      status.textContent = t("live_checked", { time: now });
-    }
-    status.style.color = "";
-  } catch (e) {
-    status.textContent = t("live_error", { err: e.message });
-    status.style.color = "var(--danger, #b83a3a)";
+// ------------------------------------------------------------------ Hour
+function renderHour(d) {
+  const arr = d.avg_all, idx = arr.map((v, i) => i).filter(i => arr[i] !== null);
+  if (!idx.length) { ["hPeak", "hQuiet", "hRush"].forEach(k => $(k).textContent = "–"); ["hPeakSub", "hQuietSub"].forEach(k => $(k).textContent = t("no_data")); }
+  else {
+    const pk = idx.reduce((a, b) => arr[b] > arr[a] ? b : a), lo = idx.reduce((a, b) => arr[b] < arr[a] ? b : a);
+    $("hPeak").textContent = hh(pk);   $("hPeakSub").textContent = `${fmtNumber(Math.round(arr[pk]))} ${t("hr_unit")}`;
+    $("hQuiet").textContent = hh(lo);  $("hQuietSub").textContent = `${fmtNumber(Math.round(arr[lo]))} ${t("hr_unit")}`;
+    const all = idx.reduce((s, i) => s + arr[i], 0), rush = [7, 8, 9, 17, 18, 19].reduce((s, i) => s + (arr[i] || 0), 0);
+    $("hRush").textContent = (all ? rush / all * 100 : 0).toFixed(1) + "%";
   }
-}
-setInterval(() => { if (!document.hidden) pollLive(); }, LIVE_REFRESH_MS);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
-document.addEventListener("i18n:changed", renderLive);
-pollLive();
-
-let viz;
-
-// The published dashboards are fixed-size (1366 x 768 in the workbook). Tableau does not scale a
-// fixed-size dashboard inside its frame, so the frame is created at the dashboard's own size
-// (plus room for the Tableau toolbar) and the whole thing is scaled to the width of the page.
-const design = { w: 1366, h: 768 };
-const TOOLBAR_PX = 59;       // space Tableau reserves for its toolbar below the dashboard
-const MAX_SCALE = 2;         // upper limit when enlarging to fill a very wide page
-
-function layoutViz() {
-  const holder = document.getElementById("vizHolder");
-  const wrap = document.getElementById("vizWrap");
-  const container = document.getElementById("vizContainer");
-  const fullH = design.h + TOOLBAR_PX;
-  const availW = holder.clientWidth;
-  // Fill the full width of the card (enlarging or shrinking as needed); the page scrolls vertically.
-  const scale = Math.min(MAX_SCALE, availW / design.w);
-  container.style.width = design.w + "px";
-  container.style.height = fullH + "px";
-  container.style.transform = `scale(${scale})`;
-  wrap.style.width = Math.floor(design.w * scale) + "px";
-  wrap.style.height = Math.floor(fullH * scale) + "px";
+  const labels = [...Array(24).keys()].map(String);
+  const sets = ["weekday", "off"].filter(k => d.by_day[k].some(v => v !== null)).map(k => ({
+    label: t(k === "weekday" ? "ov_day_weekday" : "ov_day_off"), data: d.by_day[k], borderColor: DAY_COLORS[k], backgroundColor: DAY_COLORS[k],
+    tension: .25, pointRadius: 3, spanGaps: false }));
+  upsert("chHourLine", { type: "line", data: { labels, datasets: sets },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" } },
+      scales: { y: yTicks, x: { title: { display: true, text: t("hr_h") } } } } });
+  upsert("chHourSplit", { type: "bar",
+    data: { labels, datasets: [
+      { label: t("th_casual"), data: d.casual, backgroundColor: USER_COLORS.casual },
+      { label: t("th_registered"), data: d.registered, backgroundColor: USER_COLORS.registered }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" } },
+      scales: { x: { stacked: true, title: { display: true, text: t("hr_h") } }, y: { ...yTicks, stacked: true } } } });
 }
 
-// If Tableau reports a fixed size for the shown dashboard, use it instead of the defaults.
-function readDashboardSize() {
-  try {
-    const size = viz.getWorkbook().getActiveSheet().getSize();
-    const max = size && size.maxSize;
-    if (size && size.behavior === "exactly" && max && max.width && max.height) {
-      design.w = max.width; design.h = max.height;
-      return true;
-    }
-  } catch (e) {}
-  return false;
+// ------------------------------------------------------------------ Weather
+function renderWeather(d) {
+  const sit = d.weather.filter(w => w.n >= 20);               // the 2 "severe" hours in the data are not a pattern
+  const clear = sit.find(w => w.id === 1), bad = sit.filter(w => w.id >= 3);
+  const badN = bad.reduce((s, w) => s + w.n, 0), badAvg = badN ? bad.reduce((s, w) => s + w.avg * w.n, 0) / badN : null;
+  $("wClear").textContent = clear ? fmtNumber(Math.round(clear.avg)) : "–";
+  $("wBad").textContent = badAvg !== null ? fmtNumber(Math.round(badAvg)) : "–";
+  $("wBadSub").textContent = badAvg !== null && clear ? t("wx_vs_clear", { pct: pctTxt((badAvg / clear.avg - 1) * 100) }) : "";
+  const best = d.temp.length ? d.temp.reduce((a, b) => b.avg > a.avg ? b : a) : null;
+  $("wBest").textContent = best ? `${best.from}–${best.to} °C` : "–";
+  $("wBestSub").textContent = best ? `${fmtNumber(Math.round(best.avg))} ${t("wx_unit")}` : "";
+
+  const bar = (id, labels, vals, colors, labelsOn) => upsert(id, { type: "bar",
+    data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 18 } },
+      plugins: { legend: { display: false }, valueLabels: { show: labelsOn } }, scales: { y: yTicks } } });
+  bar("chWxSit", sit.map(w => wxName(w.id)), sit.map(w => w.avg), sit.map(w => WEATHER_COLORS[w.id]), true);
+  const binBar = (id, rows, color) => bar(id, rows.map(r => `${r.from}–${r.to}`), rows.map(r => r.avg), rows.map(() => color), false);
+  binBar("chWxTemp", d.temp, "#f28e2b"); binBar("chWxHum", d.hum, "#76b7b2"); binBar("chWxWind", d.wind, "#9c9290");
 }
 
-function setUrlStatus(text, isError) {
-  const el = document.getElementById("urlStatus");
-  el.textContent = text;
-  el.style.color = isError ? "var(--danger, #b83a3a)" : "";
-}
-
-// Tableau Public "share" links look like .../app/profile/<user>/viz/<Workbook>/<Sheet>;
-// the embedding API needs .../views/<Workbook>/<Sheet>. Other URLs are used unchanged.
-function toEmbedUrl(url) {
-  const m = url.match(/^(https?:\/\/[^\/]+)\/app\/profile\/[^\/]+\/viz\/([^\/?#]+)\/([^\/?#]+)/);
-  return m ? `${m[1]}/views/${m[2]}/${m[3]}` : url;
-}
-
-function loadViz(url) {
-  const container = document.getElementById("vizContainer");
-  if (viz) { try { viz.dispose(); } catch (e) {} viz = null; }
-  layoutViz();
-  const options = {
-    hideTabs: false, hideToolbar: false, device: "desktop",
-    width: design.w + "px", height: (design.h + TOOLBAR_PX) + "px",
-    onFirstInteractive: () => {
-      if (readDashboardSize()) { layoutViz(); try { viz.setFrameSize(design.w, design.h + TOOLBAR_PX); } catch (e) {} }
-    },
-  };
-  viz = new tableau.Viz(container, toEmbedUrl(url), options);
-  try {
-    viz.addEventListener(tableau.TableauEventName.TAB_SWITCH, () => {
-      if (readDashboardSize()) { layoutViz(); try { viz.setFrameSize(design.w, design.h + TOOLBAR_PX); } catch (e) {} }
-    });
-  } catch (e) {}
-}
-
-async function updateCharts() {
-  const input = document.getElementById("tableauUrl");
-  const btn = document.getElementById("btnUpdateCharts");
-  const url = input.value.trim();
-  btn.disabled = true;
-  try {
-    await apiSend("/api/tableau-url", "POST", { url });
-    loadViz(url);
-    setUrlStatus(t("tbl_status_loaded", { time: new Date().toLocaleTimeString() }), false);
-  } catch (e) {
-    setUrlStatus(t("tbl_status_error", { err: e.message }), true);
-  } finally {
-    btn.disabled = false;
+// ------------------------------------------------------------------ Forecast
+function renderForecast(d) {
+  const r = d.result, sel = $("fcMonths");
+  [...sel.options].forEach(o => o.textContent = t("fc_months", { n: o.value }));
+  if (!r) {
+    ["fTotal", "fAvg", "fPeak"].forEach(k => $(k).textContent = "–"); ["fTotalSub", "fYoy", "fPeakSub"].forEach(k => $(k).textContent = "");
+    $("fNote").textContent = t("fc_need"); if (charts.chForecast) { charts.chForecast.destroy(); delete charts.chForecast; } return;
   }
+  const H = r.history, F = r.forecast, lab = x => `${MONTHS[x.month - 1]} ${x.year}`;
+  $("fTotal").textContent = fmtK(r.forecast_total);
+  $("fTotalSub").textContent = t("fc_total_sub", { n: r.horizon });
+  $("fAvg").textContent = fmtK(r.forecast_total / F.length);
+  // compare each forecast month with the same month one year earlier (only when all of them exist in the history)
+  const prev = F.map(f => H.find(h => h.year === f.year - 1 && h.month === f.month));
+  const yoy = $("fYoy");
+  if (prev.every(Boolean)) {
+    const p = prev.reduce((s, h) => s + h.value, 0), g = (r.forecast_total / p - 1) * 100;
+    yoy.textContent = t("fc_yoy", { pct: pctTxt(g) }); yoy.className = "sub " + (g >= 0 ? "up" : "down");
+  } else { yoy.textContent = ""; yoy.className = "sub"; }
+  const pk = F.reduce((a, b) => b.value > a.value ? b : a);
+  $("fPeak").textContent = lab(pk); $("fPeakSub").textContent = fmtK(pk.value);
+  $("fNote").textContent = t("fc_note", { n: r.months_used }) + (r.months_skipped ? t("fc_skipped", { n: r.months_skipped }) : "");
+
+  const labels = H.map(lab).concat(F.map(lab)), nh = H.length, pad = a => a.concat(Array(F.length).fill(null)), lead = a => Array(nh).fill(null).concat(a);
+  const fc = Array(nh - 1).fill(null).concat([H[nh - 1].value]).concat(F.map(f => f.value));   // starts at the last actual point
+  upsert("chForecast", { type: "line", data: { labels, datasets: [
+      { label: t("fc_actual"), data: pad(H.map(h => h.value)), borderColor: "#4e8fbf", backgroundColor: "#4e8fbf", tension: .25, pointRadius: 3 },
+      { label: t("fc_fit"), data: pad(H.map(h => h.fit)), borderColor: "#b9c6d2", borderDash: [2, 3], pointRadius: 0, tension: .25 },
+      { label: t("fc_forecast"), data: fc, borderColor: "#f28e2b", backgroundColor: "#f28e2b", borderDash: [6, 4], tension: .25, pointRadius: 3 },
+      { label: "", data: lead(F.map(f => f.low)), borderWidth: 0, pointRadius: 0, fill: false, tension: .25 },
+      { label: t("fc_range"), data: lead(F.map(f => f.high)), borderWidth: 0, pointRadius: 0, fill: "-1", backgroundColor: "rgba(242,142,43,.16)", tension: .25 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { filter: i => i.text !== "" } } },
+      scales: { y: yTicks, x: { ticks: { autoSkip: true, maxTicksLimit: 14 } } } } });
 }
 
-async function initDashboard() {
-  let url;
-  try { url = (await apiGet("/api/tableau-url")).url; }
-  catch (e) { setUrlStatus(t("tbl_status_error", { err: e.message }), true); return; }
-  document.getElementById("tableauUrl").value = url;
-  loadViz(url);
+// ------------------------------------------------------------------ What-if (the browser does the arithmetic)
+const wf = { model: null, ready: false, years: "" };
+const wiNum = id => +$(id).value;
+
+function wfPredict(name, hr, wd, w, temp, hum, wind, year) {
+  const m = wf.model.models[name], s = wf.model.stats, zt = (temp - s.temp[0]) / s.temp[1];
+  const f = [w === 2 ? 1 : 0, w >= 3 ? 1 : 0, zt, zt * zt, (hum - s.hum[0]) / s.hum[1], (wind - s.wind[0]) / s.wind[1], year - 2011];
+  let z = m.base[hr][wd]; for (let i = 0; i < f.length; i++) z += m.beta[i] * f[i];
+  return Math.max(0, Math.exp(z) * m.smear - 1);
+}
+// total comes from the "all riders" model; the casual / registered models only decide the split
+function wfTotal(hr, wd, w, temp, hum, wind, year) { return wfPredict("cnt", hr, wd, w, temp, hum, wind, year); }
+
+function wfFill() {
+  const m = wf.model, ty = m.typical, keepDay = $("wiDay").value, keepW = $("wiWeather").value;
+  $("wiDay").innerHTML = `<option value="1">${t("ov_day_weekday")}</option><option value="0">${t("ov_day_off")}</option>`;
+  $("wiWeather").innerHTML = [1, 2, 3, 4].map(i => `<option value="${i}">${wxName(i)}</option>`).join("");
+  $("wiDay").value = keepDay || "1"; $("wiWeather").value = keepW || String(ty.weather);
+  const ysig = m.years.join();
+  if (!wf.ready || wf.years !== ysig) {
+    $("wiYear").innerHTML = m.years.map(y => `<option value="${y}">${y}</option>`).join("");
+    wf.years = ysig; wfReset();
+  }
+  wf.ready = true;
+}
+function wfReset() {
+  const ty = wf.model.typical, r = wf.model.ranges;
+  $("wiTemp").min = r.temp[0]; $("wiTemp").max = r.temp[1]; $("wiHum").max = r.hum[1]; $("wiWind").max = r.wind[1];
+  $("wiHour").value = 8; $("wiDay").value = "1"; $("wiWeather").value = String(ty.weather);
+  $("wiTemp").value = Math.round(ty.temp * 2) / 2; $("wiHum").value = Math.round(ty.hum); $("wiWind").value = Math.round(ty.wind * 2) / 2;
+  $("wiYear").value = String(ty.year); wfUpdate();
+}
+function wfUpdate() {
+  if (!wf.model) return;
+  const hr = wiNum("wiHour"), wd = wiNum("wiDay"), w = wiNum("wiWeather"), temp = wiNum("wiTemp"), hum = wiNum("wiHum"), wind = wiNum("wiWind"), yr = wiNum("wiYear");
+  $("oHour").textContent = hh(hr); $("oTemp").textContent = temp.toFixed(1) + " °C"; $("oHum").textContent = hum + " %"; $("oWind").textContent = wind.toFixed(1);
+  const ty = wf.model.typical;
+  const scn = [...Array(24).keys()].map(h => wfTotal(h, wd, w, temp, hum, wind, yr));
+  const typ = [...Array(24).keys()].map(h => wfTotal(h, wd, ty.weather, ty.temp, ty.hum, ty.wind, yr));
+  $("pTotal").textContent = fmtNumber(Math.round(scn[hr]));
+  $("pTotalSub").textContent = t("wi_pred_sub", { h: hr }) + " · " +
+    [["casual", t("th_casual")], ["registered", t("th_registered")]].map(([n, l]) => {
+      const c = wfPredict("casual", hr, wd, w, temp, hum, wind, yr), g = wfPredict("registered", hr, wd, w, temp, hum, wind, yr);
+      return `${l} ${fmtNumber(Math.round(scn[hr] * (n === "casual" ? c : g) / ((c + g) || 1)))}`; }).join(" / ");
+  const diff = typ[hr] ? (scn[hr] / typ[hr] - 1) * 100 : 0;
+  $("pVs").textContent = pctTxt(diff) + "%";
+  $("pDay").textContent = fmtNumber(Math.round(scn.reduce((a, b) => a + b, 0)));
+  const labels = [...Array(24).keys()].map(String), mark = labels.map((_, i) => i === hr ? 7 : 0);
+  const sets = [
+    { label: t("wi_scn"), data: scn.map(Math.round), borderColor: "#4e8fbf", backgroundColor: "#4e8fbf", tension: .25, pointRadius: mark, pointHoverRadius: 5 },
+    { label: t("wi_typ"), data: typ.map(Math.round), borderColor: "#b9c6d2", borderDash: [6, 4], tension: .25, pointRadius: 0 }];
+  if (charts.chWi) { charts.chWi.data.datasets.forEach((d, i) => { d.data = sets[i].data; d.label = sets[i].label; });
+    charts.chWi.data.datasets[0].pointRadius = mark; charts.chWi.update("none"); }
+  else upsert("chWi", { type: "line", data: { labels, datasets: sets },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "top" } },
+      scales: { y: yTicks, x: { title: { display: true, text: t("hr_h") } } } } });
+}
+function renderWhatIf(d) {
+  if (!d.model) { $("wiNote").textContent = t("wi_need"); return; }
+  wf.model = d.model; wfFill();
+  $("wiNote").textContent = t("wi_note", { n: fmtNumber(d.model.records), r2: d.model.models.cnt.r2 });
+  wfUpdate();
 }
 
-document.getElementById("btnUpdateCharts").addEventListener("click", updateCharts);
-document.getElementById("tableauUrl").addEventListener("keydown", (e) => { if (e.key === "Enter") updateCharts(); });
-window.addEventListener("resize", layoutViz);
-function fmtTime(iso) { return iso ? iso.replace("T", " ") : "—"; }
+const RENDER = { overview: renderOverview, hour: renderHour, weather: renderWeather, forecast: renderForecast, whatif: renderWhatIf };
 
-async function loadPipelineStatus() {
-  const box = document.getElementById("pipelineStatus");
+// ------------------------------------------------------------------ loading / switching
+function render() { if (data) { RENDER[view](data); showStatus(false); } }
+
+function showStatus(justChanged) {
+  const el = $("liveStatus"); if (!data) return;
+  const built = (data.built_at || "").replace("T", " ");
+  el.textContent = (justChanged ? t("live_changed") + " · " : "") + t("live_source", { rows: fmtNumber(data.record_count || 0), time: built });
+  el.style.color = "";
+}
+
+function applyLocks() { ["fYear", "fUser", "fDay"].forEach(id => $(id).disabled = LOCKED[view].includes(id)); }
+
+function setView(v) {
+  if (v === view) return;
+  view = v; data = null;
+  document.querySelectorAll(".ov-nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  document.querySelectorAll(".ov-view").forEach(el => el.classList.toggle("active", el.id === "v-" + v));
+  applyLocks(); load(false);
+}
+
+async function load(justChanged) {
+  if (busy) { pending = true; return; }     // a filter changed while loading: reload once the current request ends
+  busy = true;
+  const asked = view;
   try {
-    const st = await apiGet("/api/tableau/status");
-    const last = st.last_run;
-    const f = st.files;
-    let html = "";
-    if (!last) {
-      html += `<div>${t("pipe_never")}</div>`;
-    } else if (last.status === "success") {
-      html += `<div>✅ ${t("pipe_ok", { time: last.event_time, rows: fmtNumber(last.records_synced) })}</div>`;
-    } else {
-      html += `<div style="color:var(--danger,#b83a3a)">⚠ ${t("pipe_err", { err: last.message })}</div>`;
+    const q = new URLSearchParams({ year: $("fYear").value || "0", user: $("fUser").value, daytype: $("fDay").value });
+    if (asked === "forecast") q.set("months", $("fcMonths").value);
+    let d = await apiGet(ENDPOINT[asked] + "?" + q);
+    if (firstLoad) {
+      buildYearOptions(d.years);
+      const want = $("fYear").value;
+      if (q.get("year") !== want) { q.set("year", want); d = await apiGet(ENDPOINT[asked] + "?" + q); }
+      firstLoad = false;
+    } else if (JSON.stringify(d.years) !== JSON.stringify([...$("fYear").options].slice(1).map(o => +o.value))) {
+      buildYearOptions(d.years);
     }
-    html += `<div>${t("pipe_files")}: ${["hyper", "twb", "twbx"].map(k =>
-      `<code>${f[k].name}</code> ${f[k].exists ? "(" + fmtTime(f[k].modified) + ")" : "(" + t("pipe_missing") + ")"}`).join(" · ")}</div>`;
-    box.innerHTML = html;
-  } catch (e) { box.textContent = t("tbl_status_error", { err: e.message }); }
+    if (asked !== view) { pending = true; return; }          // the person switched view meanwhile: load that one instead
+    data = d; shownVersion = d.version;
+    render();
+    if (justChanged) showStatus(true);
+  } catch (e) {
+    const el = $("liveStatus"); el.textContent = t("live_error", { err: e.message }); el.style.color = "var(--danger, #b83a3a)";
+  } finally { busy = false; if (pending) { pending = false; load(false); } }
 }
 
-async function refreshPipeline() {
-  const btn = document.getElementById("btnRefreshPipeline");
-  btn.disabled = true;
-  document.getElementById("pipelineStatus").textContent = t("pipe_running");
-  try { await apiSend("/api/tableau/refresh", "POST", {}); }
-  catch (e) { /* the failure text is shown by loadPipelineStatus() from the sync log */ }
-  await loadPipelineStatus();
-  btn.disabled = false;
+async function checkVersion() {
+  if (document.hidden) return;
+  try { const v = await apiGet("/api/version"); if (v.version !== shownVersion) await load(shownVersion !== null); } catch (e) { /* retry next tick */ }
 }
-document.getElementById("btnRefreshPipeline").addEventListener("click", refreshPipeline);
-loadPipelineStatus();
-document.addEventListener("i18n:changed", loadPipelineStatus);
 
-layoutViz();
-initDashboard();
+["fYear", "fUser", "fDay", "fcMonths"].forEach(id => $(id).addEventListener("change", () => load(false)));
+document.querySelectorAll(".ov-nav-btn").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+["wiHour", "wiDay", "wiWeather", "wiTemp", "wiHum", "wiWind", "wiYear"].forEach(id => $(id).addEventListener("input", wfUpdate));
+$("wiReset").addEventListener("click", () => wf.model && wfReset());
+document.addEventListener("i18n:changed", () => { if (data) { buildYearOptions(data.years); if (view === "whatif" && wf.model) wfFill(); render(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
+if (window.dataChannel) window.dataChannel.onmessage = () => checkVersion();
+applyLocks();
+setInterval(checkVersion, CHECK_MS);
+load(false);
 </script>
 {% endblock %}

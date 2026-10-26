@@ -1,544 +1,369 @@
 """
 app.py — BikeShare Analytics website (Flask)
 
-Pages (per spec section 5):
-  5.1 /                     Dashboard
-  5.2 /data                 Data Management
-  5.3 /data/add             Add and Edit Data (shared form)
-  5.4 /analysis             Analysis Results
-  5.5 /status                Data Update Status
+Data flow (see pipeline.py):
+    website form  ->  Excel workbook (Web_Entries sheet, same file, no copies)
+                  ->  Bike_Sharing.hyper rebuilt from the workbook
+                  ->  Dashboard charts queried from the .hyper
+                  ->  open Dashboard pages redraw straight away
 
-API endpoints used by the pages' JS (static/js/main.js):
-  GET    /api/records               paginated, searchable, filterable table rows
-  GET    /api/records/<id>          single record (for Edit form pre-fill)
-  POST   /api/records               create a web_entries record
-  PUT    /api/records/<id>          update a web_entries record
-  DELETE /api/records/<id>          delete a web_entries record (web_entries only)
-  GET    /api/dashboard             dashboard summary + chart data
-  GET    /api/analysis              analysis results (descriptive/correlation/regression/pivots)
-  POST   /api/analysis/update       manually trigger recalculation (5.5 "Update Analysis" button)
+Pages
+  /            Dashboard
+  /data        Data Management (browse, edit, delete)
+  /data/add    Add / Edit record (shared form)
+  /analysis    Analysis Results
+  /status      Data Update Status
+
+API (used by static/js/main.js and the page scripts)
+  GET    /api/records, /api/records/<id>, /api/years
+  POST   /api/records               add a record   -> Excel -> .hyper
+  PUT    /api/records/<id>          edit a record  -> Excel -> .hyper
+  DELETE /api/records/<id>          delete a record-> Excel -> .hyper
+  GET    /api/dashboard             chart data, queried from the .hyper
+  GET    /api/version               tiny "has the data changed?" check the Dashboard polls
+  GET    /api/analysis              statistics over Raw_Data + Web_Entries
+  POST   /api/analysis/update       re-read the Excel file and rebuild the .hyper now
   GET    /api/sync-log              history for the Data Update Status page
-  GET    /export/latest             downloads Bike_Sharing_Export.xlsx (7.1)
-  GET    /export/updated-workbook   downloads Bike_Sharing_Analysis_Updated.xlsx (7.2)
-  GET    /export/tableau-csv        downloads Bike_Sharing_Tableau_Data.csv (Tableau update file)
-  GET    /export/tableau-xlsx       downloads Bike_Sharing_Tableau_Data.xlsx (Tableau update file)
-  GET    /api/tableau-url           saved Tableau Public dashboard URL
-  POST   /api/tableau-url           save the Tableau Public dashboard URL
-  POST   /api/tableau/refresh       run Excel -> .hyper -> .twb/.twbx now (Dashboard "Refresh" button)
-  GET    /api/tableau/status        state of the last pipeline run + generated files
-  GET    /export/tableau-workbook   downloads Project_data_Analysis.twbx (twb + hyper) for publishing
-  GET    /export/tableau-hyper      downloads Bike_Sharing.hyper
+  GET    /export/workbook           download the live Excel workbook
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
-import os
-import threading
-import sqlite3
 import datetime
-from urllib.parse import urlparse
+
+from flask import Flask, jsonify, render_template, request, send_file
+
 import analytics
+import datastore
+import hyperstore
+import models
+import pipeline
 
 app = Flask(__name__)
-
-
-def get_conn():
-    conn = sqlite3.connect(analytics.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_settings():
-    """Small key/value table that keeps the saved Tableau Public URL."""
-    conn = get_conn()
-    conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-    conn.commit()
-    conn.close()
-
-
-init_settings()
-
-DEFAULT_TABLEAU_URL = "https://public.tableau.com/views/Project_data_Analysis/Overview"
-
-
-def log_sync(event_type, status, records_synced=0, message=""):
-    conn = get_conn()
-    conn.execute(
-        "INSERT INTO sync_log (event_type, status, records_synced, message) VALUES (?,?,?,?)",
-        (event_type, status, records_synced, message),
-    )
-    conn.commit()
-    conn.close()
-
-
-def auto_sync_after_change(action, instant=None):
-    """Spec 6.2/6.3/8.5: after any add/edit/delete, the system must
-    automatically update Excel analysis + log the sync event."""
-    try:
-        analytics.run_full_analysis()
-        log_sync("auto_sync", "success", records_synced=1,
-                  message=f"Record {action} (id={instant}); analysis recalculated.")
-    except Exception as e:
-        log_sync("auto_sync", "error", records_synced=0, message=str(e))
-    refresh_tableau_files(f"Record {action} (id={instant})")
-
-
-_pipeline_lock = threading.Lock()   # only one Excel -> .hyper -> .twb run at a time
-
-
-def refresh_tableau_files(reason):
-    """Dashboard pipeline: Excel file -> .hyper -> .twb/.twbx (see tableau_sync.py).
-    Never raises: a failure is logged on the Data Update Status page and the save itself still succeeds.
-    Runs are serialized: two overlapping runs used to overwrite the Excel file while the other was
-    reading it ("Bad CRC-32" errors in the sync log)."""
-    try:
-        import tableau_sync                       # needs the 'tableauhyperapi' package
-        with _pipeline_lock:
-            excel_path, _ = analytics.export_tableau_xlsx()      # the Excel file
-            result = tableau_sync.run_pipeline(excel_path)       # Excel -> .hyper -> .twb -> .twbx
-        log_sync("tableau_sync", "success", records_synced=result["rows"],
-                  message=f"{reason}: Excel -> Bike_Sharing.hyper -> Project_data_Analysis.twb/.twbx updated.")
-        return result
-    except Exception as e:
-        log_sync("tableau_sync", "error", message=f"{reason}: {e}")
-        return {"error": str(e)}
-
-
-# ---------------- Page routes ----------------
-
-@app.route("/")
-def dashboard():
-    return render_template("dashboard.html")
-
-
-@app.route("/data")
-def data_management():
-    return render_template("data_management.html")
-
-
-@app.route("/data/add")
-def add_edit():
-    edit_id = request.args.get("id")
-    return render_template("add_edit.html", edit_id=edit_id)
-
-
-@app.route("/analysis")
-def analysis_results():
-    return render_template("analysis_results.html")
-
-
-@app.route("/status")
-def update_status():
-    return render_template("update_status.html")
-
-
-# ---------------- API: records (Data Management + Add/Edit) ----------------
 
 SEASON_LABELS = {1: "Spring", 2: "Summer", 3: "Fall", 4: "Winter"}
 WEATHER_LABELS = {1: "Clear", 2: "Mist/Cloudy", 3: "Light Rain/Snow", 4: "Severe Weather"}
 
+# Make sure the .hyper exists and matches the Excel file before the first request.
+try:
+    pipeline.ensure_fresh("Startup")
+except Exception as exc:                       # the error is already in the sync log
+    print(f"[startup] could not build the .hyper: {exc}")
+
+
+@app.errorhandler(datastore.ExcelLockedError)
+def excel_locked(e):
+    return jsonify({"error": str(e)}), 423
+
+
+# ---------------- Pages ----------------
+
+@app.route("/")
+def dashboard():
+    return render_template("dashboard.html", active="dashboard")
+
+
+@app.route("/data")
+def data_management():
+    return render_template("data_management.html", active="data")
+
+
+@app.route("/data/add")
+def add_edit():
+    return render_template("add_edit.html", edit_id=request.args.get("id"), active="data")
+
+
+@app.route("/analysis")
+def analysis_results():
+    return render_template("analysis_results.html", active="analysis")
+
+
+@app.route("/status")
+def update_status():
+    return render_template("update_status.html", active="status")
+
+
+# ---------------- Records (Data Management + Add/Edit) ----------------
 
 @app.route("/api/years")
 def api_years():
-    conn = get_conn()
-    years = set()
-    for table in ("raw_data", "web_entries"):
-        rows = conn.execute(f"SELECT DISTINCT strftime('%Y', dteday) AS y FROM {table}").fetchall()
-        years.update(int(r["y"]) for r in rows if r["y"])
-    conn.close()
-    return jsonify(sorted(years))
+    return jsonify(sorted({int(r["dteday"][:4]) for r in datastore.all_rows()}))
 
 
 @app.route("/api/records")
 def api_records():
-    page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 25))
-    month = request.args.get("month", "").strip()   # 1-12
-    year = request.args.get("year", "").strip()      # e.g. 2011
-    source = request.args.get("source", "all")  # all | raw | web
-    season = request.args.get("season", "")
-    weathersit = request.args.get("weathersit", "")
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = max(1, min(200, int(request.args.get("per_page", 25))))
+    month, year = request.args.get("month", "").strip(), request.args.get("year", "").strip()
+    source = request.args.get("source", "all")                  # all | raw | web
+    season, weathersit = request.args.get("season", ""), request.args.get("weathersit", "")
 
-    conn = get_conn()
-    results = []
+    def keep(r):
+        return ((source == "all" or r["source"] == source)
+                and (not month or int(r["dteday"][5:7]) == int(month))
+                and (not year or int(r["dteday"][:4]) == int(year))
+                and (not season or r["season"] == int(season))
+                and (not weathersit or r["weathersit"] == int(weathersit)))
 
-    def fetch(table, tag):
-        q = f"SELECT *, '{tag}' AS source FROM {table} WHERE 1=1"
-        params = []
-        if month:
-            q += " AND CAST(strftime('%m', dteday) AS INTEGER) = ?"
-            params.append(int(month))
-        if year:
-            q += " AND CAST(strftime('%Y', dteday) AS INTEGER) = ?"
-            params.append(int(year))
-        if season:
-            q += " AND season = ?"
-            params.append(season)
-        if weathersit:
-            q += " AND weathersit = ?"
-            params.append(weathersit)
-        return conn.execute(q, params).fetchall()
-
-    if source in ("all", "raw"):
-        results += [dict(r) for r in fetch("raw_data", "raw")]
-    if source in ("all", "web"):
-        results += [dict(r) for r in fetch("web_entries", "web")]
-
-    results.sort(key=lambda r: (r["dteday"], r["hr"]))
+    results = [r for r in datastore.all_rows() if keep(r)]
     total = len(results)
     start = (page - 1) * per_page
-    page_rows = results[start:start + per_page]
-
+    page_rows = [dict(r) for r in results[start:start + per_page]]
     for r in page_rows:
         r["season_label"] = SEASON_LABELS.get(r["season"], r["season"])
         r["weather_label"] = WEATHER_LABELS.get(r["weathersit"], r["weathersit"])
         r["temp_c"] = analytics.temp_to_celsius(r["temp"])
         r["hum_pct"] = analytics.hum_to_percent(r["hum"])
-
-    conn.close()
-    return jsonify({
-        "total": total, "page": page, "per_page": per_page,
-        "total_pages": max(1, (total + per_page - 1) // per_page),
-        "records": page_rows,
-    })
+    return jsonify({"total": total, "page": page, "per_page": per_page,
+                    "total_pages": max(1, (total + per_page - 1) // per_page), "records": page_rows})
 
 
 @app.route("/api/records/<int:instant>")
 def api_record_detail(instant):
-    source = request.args.get("source", "web")
-    table = "raw_data" if source == "raw" else "web_entries"
-    conn = get_conn()
-    row = conn.execute(f"SELECT * FROM {table} WHERE instant = ?", (instant,)).fetchone()
-    conn.close()
-    if not row:
-        return jsonify({"error": "Record not found"}), 404
-    return jsonify(dict(row))
+    rows = datastore.load_raw() if request.args.get("source") == "raw" else datastore.load_web()
+    for r in rows:
+        if r["instant"] == instant:
+            return jsonify(r)
+    return jsonify({"error": "Record not found"}), 404
 
 
-def validate_payload(data):
+def build_record(data, ignore_instant=None):
+    """Validate the form payload and convert it to the 17 Excel columns.
+    Returns (record, errors, http_status)."""
     errors = []
-    required_numeric = ["season", "yr", "mnth", "hr", "holiday", "weekday", "workingday",
-                         "weathersit", "casual", "registered"]
-    for f in required_numeric:
-        if f not in data:
-            errors.append(f"Missing field: {f}")
-    if not data.get("dteday"):
-        errors.append("Date (dteday) is required")
-    try:
-        if int(data.get("casual", -1)) < 0:
-            errors.append("Casual users must be a non-negative integer")
-        if int(data.get("registered", -1)) < 0:
-            errors.append("Registered users must be a non-negative integer")
-    except (TypeError, ValueError):
-        errors.append("Casual/Registered must be integers")
-    try:
-        hr = int(data.get("hr", -1))
-        if not (0 <= hr <= 23):
-            errors.append("Hour must be between 0 and 23")
-    except (TypeError, ValueError):
-        errors.append("Hour must be an integer 0-23")
 
-    # holiday / workingday consistency (same rule as the original dataset):
-    #   workingday = 1  <=>  Monday-Friday and not a public holiday
-    try:
-        holiday, workingday, weekday = int(data.get("holiday")), int(data.get("workingday")), int(data.get("weekday"))
-        expected = 1 if (1 <= weekday <= 5 and holiday == 0) else 0
-        if workingday != expected:
-            if holiday == 1:
-                errors.append("A public holiday cannot be a working day.")
-            elif weekday in (0, 6):
-                errors.append("Saturdays and Sundays cannot be working days.")
-            else:
-                errors.append("A normal Monday-Friday that is not a public holiday must be a working day.")
-    except (TypeError, ValueError):
-        pass  # missing/invalid values are reported by the checks above
+    def num(name, lo, hi, integer=False):
+        try:
+            v = float(data[name])
+            if integer and v != int(v):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"{name} is required and must be {'an integer' if integer else 'a number'}")
+            return None
+        if not (lo <= v <= hi):
+            errors.append(f"{name} must be between {lo} and {hi}")
+            return None
+        return int(v) if integer else v
 
-    bounds = {
-        "temp_c": (0, 41), "atemp_c": (0, 50), "hum_pct": (0, 100),
-        "windspeed_val": (0, 67), "casual": (0, 1000), "registered": (0, 1000),
+    try:
+        day = datetime.date.fromisoformat(str(data.get("dteday", ""))[:10])
+        if day.year < 2011:
+            errors.append("Date must be in 2011 or later")
+    except ValueError:
+        day = None
+        errors.append("Date (dteday) is required, format YYYY-MM-DD")
+
+    hr = num("hr", 0, 23, True)
+    season = num("season", 1, 4, True)
+    holiday = num("holiday", 0, 1, True)
+    workingday = num("workingday", 0, 1, True)
+    weathersit = num("weathersit", 1, 4, True)
+    temp_c = num("temp_c", 0, 41)
+    atemp_c = num("atemp_c", 0, 50)
+    hum_pct = num("hum_pct", 0, 100)
+    wind = num("windspeed_val", 0, 67)
+    casual = num("casual", 0, 1000, True)
+    registered = num("registered", 0, 1000, True)
+    if errors:
+        return None, errors, 400
+
+    # yr / mnth / weekday always come from the date itself (never trusted from the browser)
+    weekday = day.isoweekday() % 7                   # Sunday = 0 ... Saturday = 6, like the dataset
+    expected = 1 if (1 <= weekday <= 5 and holiday == 0) else 0
+    if workingday != expected:
+        if holiday == 1:
+            errors.append("A public holiday cannot be a working day.")
+        elif weekday in (0, 6):
+            errors.append("Saturdays and Sundays cannot be working days.")
+        else:
+            errors.append("A normal Monday-Friday that is not a public holiday must be a working day.")
+        return None, errors, 400
+
+    dup = datastore.find_duplicate(day.isoformat(), hr, ignore_instant)
+    if dup:
+        where = "the original data" if dup["source"] == "raw" else "the website entries"
+        return None, [f"A record for {day.isoformat()} at hour {hr} already exists in {where} "
+                      f"(id {dup['instant']}). Edit that record instead."], 409
+
+    rec = {
+        "dteday": day.isoformat(), "season": season, "yr": day.year - 2011, "mnth": day.month, "hr": hr,
+        "holiday": holiday, "weekday": weekday, "workingday": workingday, "weathersit": weathersit,
+        "temp": analytics.celsius_to_norm_temp(temp_c), "atemp": analytics.celsius_to_norm_atemp(atemp_c),
+        "hum": analytics.percent_to_norm_hum(hum_pct),
+        "windspeed": analytics.original_to_norm_windspeed(wind),
+        "casual": casual, "registered": registered, "cnt": casual + registered,
     }
-    for field, (lo, hi) in bounds.items():
-        if field in data:
-            try:
-                v = float(data[field])
-                if not (lo <= v <= hi):
-                    errors.append(f"{field} must be between {lo} and {hi}")
-            except (TypeError, ValueError):
-                errors.append(f"{field} must be a number")
-    return errors
+    return rec, [], 200
+
+
+def _is_raw(instant):
+    return any(r["instant"] == instant for r in datastore.load_raw())
 
 
 @app.route("/api/records", methods=["POST"])
 def api_create_record():
-    data = request.get_json(force=True)
-    errors = validate_payload(data)
-    if errors:
-        return jsonify({"errors": errors}), 400
-
-    casual = int(data["casual"])
-    registered = int(data["registered"])
-    cnt = casual + registered  # auto-calculated total (spec 5.3)
-
-    # Convert user-facing units -> normalized Excel units (spec 8.1)
-    temp_norm = analytics.celsius_to_norm_temp(float(data.get("temp_c", 0)))
-    atemp_norm = analytics.celsius_to_norm_atemp(float(data.get("atemp_c", data.get("temp_c", 0))))
-    hum_norm = analytics.percent_to_norm_hum(float(data.get("hum_pct", 0)))
-    windspeed_norm = analytics.original_to_norm_windspeed(float(data.get("windspeed_val", 0)))
-
-    conn = get_conn()
-    cur = conn.execute(
-        """INSERT INTO web_entries
-           (dteday, season, yr, mnth, hr, holiday, weekday, workingday, weathersit,
-            temp, atemp, hum, windspeed, casual, registered, cnt)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (data["dteday"], data["season"], data["yr"], data["mnth"], data["hr"],
-         data["holiday"], data["weekday"], data["workingday"], data["weathersit"],
-         temp_norm, atemp_norm, hum_norm, windspeed_norm, casual, registered, cnt),
-    )
-    conn.commit()
-    new_id = cur.lastrowid
-    conn.close()
-
-    auto_sync_after_change("added", new_id)
-    return jsonify({"success": True, "id": new_id, "cnt": cnt}), 201
+    with pipeline.lock:                              # check + write as one step
+        rec, errors, status = build_record(request.get_json(force=True) or {})
+        if errors:
+            return jsonify({"errors": errors}), status
+        new_id, warning = pipeline.commit("add", "new", lambda: datastore.add_entry(rec))
+    return jsonify({"success": True, "id": new_id, "cnt": rec["cnt"], "warning": warning}), 201
 
 
 @app.route("/api/records/<int:instant>", methods=["PUT"])
 def api_update_record(instant):
-    conn = get_conn()
-    existing = conn.execute("SELECT * FROM web_entries WHERE instant = ?", (instant,)).fetchone()
-    if not existing:
-        conn.close()
-        return jsonify({"error": "Record not found, or it belongs to the protected original dataset"}), 404
-
-    data = request.get_json(force=True)
-    errors = validate_payload(data)
-    if errors:
-        conn.close()
-        return jsonify({"errors": errors}), 400
-
-    casual = int(data["casual"])
-    registered = int(data["registered"])
-    cnt = casual + registered
-
-    temp_norm = analytics.celsius_to_norm_temp(float(data.get("temp_c", 0)))
-    atemp_norm = analytics.celsius_to_norm_atemp(float(data.get("atemp_c", data.get("temp_c", 0))))
-    hum_norm = analytics.percent_to_norm_hum(float(data.get("hum_pct", 0)))
-    windspeed_norm = analytics.original_to_norm_windspeed(float(data.get("windspeed_val", 0)))
-
-    conn.execute(
-        """UPDATE web_entries SET dteday=?, season=?, yr=?, mnth=?, hr=?, holiday=?, weekday=?,
-           workingday=?, weathersit=?, temp=?, atemp=?, hum=?, windspeed=?, casual=?, registered=?,
-           cnt=?, updated_at=datetime('now') WHERE instant=?""",
-        (data["dteday"], data["season"], data["yr"], data["mnth"], data["hr"],
-         data["holiday"], data["weekday"], data["workingday"], data["weathersit"],
-         temp_norm, atemp_norm, hum_norm, windspeed_norm, casual, registered, cnt, instant),
-    )
-    conn.commit()
-    conn.close()
-
-    auto_sync_after_change("edited", instant)
-    return jsonify({"success": True, "cnt": cnt})
+    with pipeline.lock:
+        if not any(r["instant"] == instant for r in datastore.load_web()):
+            if _is_raw(instant):
+                return jsonify({"error": "This record belongs to the protected original dataset."}), 403
+            return jsonify({"error": "Record not found."}), 404
+        rec, errors, status = build_record(request.get_json(force=True) or {}, ignore_instant=instant)
+        if errors:
+            return jsonify({"errors": errors}), status
+        _, warning = pipeline.commit("edit", instant, lambda: datastore.update_entry(instant, rec))
+    return jsonify({"success": True, "cnt": rec["cnt"], "warning": warning})
 
 
 @app.route("/api/records/<int:instant>", methods=["DELETE"])
 def api_delete_record(instant):
-    """Spec 1.1 / 8.3: only website-added (web_entries) records can be deleted.
-    The original Raw_Data must be protected."""
-    conn = get_conn()
-    existing = conn.execute("SELECT * FROM web_entries WHERE instant = ?", (instant,)).fetchone()
-    if not existing:
-        conn.close()
-        return jsonify({"error": "Only records added through the website can be deleted."}), 403
-    conn.execute("DELETE FROM web_entries WHERE instant = ?", (instant,))
-    conn.commit()
-    conn.close()
-    auto_sync_after_change("deleted", instant)
-    return jsonify({"success": True})
+    """Only website-added records can be deleted; the original Raw_Data stays protected."""
+    with pipeline.lock:
+        if not any(r["instant"] == instant for r in datastore.load_web()):
+            return jsonify({"error": "Only records added through the website can be deleted."}), 403
+        _, warning = pipeline.commit("delete", instant, lambda: datastore.delete_entry(instant))
+    return jsonify({"success": True, "warning": warning})
 
 
-# ---------------- API: dashboard / analysis / sync status ----------------
+# ---------------- Dashboard (reads the .hyper) ----------------
+
+@app.route("/api/version")
+def api_version():
+    pipeline.ensure_fresh()                          # picks up hand-edits made in Excel
+    return jsonify({"version": pipeline.state["version"], "built_at": pipeline.state["built_at"]})
+
 
 @app.route("/api/dashboard")
 def api_dashboard():
-    conn = get_conn()
-    rows = analytics.combined_rows(conn)
-    conn.close()
-    total_rentals = sum(r["cnt"] for r in rows)
-    total_casual = sum(r["casual"] for r in rows)
-    total_registered = sum(r["registered"] for r in rows)
-    avg_per_hour = round(total_rentals / len(rows), 2) if rows else 0
+    pipeline.ensure_fresh()
+    d = hyperstore.dashboard_data()
+    d["season"] = {SEASON_LABELS.get(k, k): v for k, v in d["season"].items()}
+    d["weather"] = {WEATHER_LABELS.get(k, k): v for k, v in d["weather"].items()}
+    d["version"] = pipeline.state["version"]
+    d["built_at"] = pipeline.state["built_at"]
+    return jsonify(d)
 
-    conn = get_conn()
-    monthly = analytics.compute_monthly_summary(conn)
-    hourly = analytics.compute_pivot(conn, "hr")
-    season = analytics.compute_pivot(conn, "season")
-    weather = analytics.compute_pivot(conn, "weathersit")
-    conn.close()
 
-    return jsonify({
-        "total_rentals": total_rentals,
-        "total_casual": total_casual,
-        "total_registered": total_registered,
-        "avg_per_hour": avg_per_hour,
-        "record_count": len(rows),
-        "monthly": monthly,
-        "hourly": hourly,
-        "season": {SEASON_LABELS.get(int(k), k): v for k, v in season.items()},
-        "weather": {WEATHER_LABELS.get(int(k), k): v for k, v in weather.items()},
-    })
+@app.route("/api/overview")
+def api_overview():
+    """Overview dashboard data: ?year=0|2011|2012&user=cnt|casual|registered&daytype=all|weekday|off"""
+    pipeline.ensure_fresh()
+    try:
+        year = int(request.args.get("year", 0))
+    except ValueError:
+        year = 0
+    user = request.args.get("user", "cnt")
+    daytype = request.args.get("daytype", "all")
+    if daytype not in ("all", "weekday", "off"):
+        daytype = "all"
+    d = hyperstore.overview_data(year, user, daytype)
+    d["version"] = pipeline.state["version"]
+    d["built_at"] = pipeline.state["built_at"]
+    return jsonify(d)
 
+
+def _filters():
+    """Year / User Type / Day Type from the query string (same meaning as on the Overview page)."""
+    try:
+        year = int(request.args.get("year", 0))
+    except ValueError:
+        year = 0
+    user = request.args.get("user", "cnt")
+    if user not in ("cnt", "casual", "registered"):
+        user = "cnt"
+    daytype = request.args.get("daytype", "all")
+    if daytype not in ("all", "weekday", "off"):
+        daytype = "all"
+    return year, user, daytype
+
+
+def _stamp(d):
+    d["version"] = pipeline.state["version"]
+    d["built_at"] = pipeline.state["built_at"]
+    d["years"] = hyperstore.years()
+    d["record_count"] = pipeline.state["rows"]
+    return d
+
+
+@app.route("/api/hour")
+def api_hour():
+    """Hour view: ?year=&user=&daytype=  -> average rentals for each hour of the day."""
+    pipeline.ensure_fresh()
+    return jsonify(_stamp(hyperstore.hour_data(*_filters())))
+
+
+@app.route("/api/weather")
+def api_weather():
+    """Weather view: ?year=&user=&daytype=  -> average rentals by weather, temperature, humidity, wind."""
+    pipeline.ensure_fresh()
+    return jsonify(_stamp(hyperstore.weather_data(*_filters())))
+
+
+@app.route("/api/forecast")
+def api_forecast():
+    """Forecast view: ?user=cnt|casual|registered&months=3|6|12 (all years are used for the trend)."""
+    pipeline.ensure_fresh()
+    _, user, _ = _filters()
+    try:
+        months = int(request.args.get("months", 12))
+    except ValueError:
+        months = 12
+    if months not in models.MONTHS_AHEAD:
+        months = 12
+    d = models.forecast_monthly(hyperstore.monthly_series(user), months)
+    return jsonify(_stamp({"user": user, "result": d}))
+
+
+_whatif_cache = {"version": None, "model": None}
+
+
+@app.route("/api/whatif")
+def api_whatif():
+    """What-if view: the fitted model (cached until the data changes). The browser does the arithmetic."""
+    pipeline.ensure_fresh()
+    v = pipeline.state["version"]
+    if _whatif_cache["version"] != v:
+        _whatif_cache.update(version=v, model=models.fit_whatif(hyperstore.model_rows()))
+    return jsonify(_stamp({"model": _whatif_cache["model"]}))
+
+
+# ---------------- Analysis + status ----------------
 
 @app.route("/api/analysis")
 def api_analysis():
-    result = analytics.run_full_analysis()
-    result["season_labels"] = {str(k): v for k, v in
-                                {k: SEASON_LABELS[k] for k in SEASON_LABELS}.items()}
-    result["weather_labels"] = {str(k): v for k, v in
-                                 {k: WEATHER_LABELS[k] for k in WEATHER_LABELS}.items()}
-    return jsonify(result)
+    pipeline.ensure_fresh()
+    return jsonify(analytics.run_full_analysis(datastore.all_rows()))
 
 
 @app.route("/api/analysis/update", methods=["POST"])
 def api_analysis_update():
+    """'Re-sync now': read the Excel file again and rebuild the .hyper."""
     try:
-        result = analytics.run_full_analysis()
-        log_sync("manual_sync", "success", records_synced=result["descriptive"].get("count", 0),
-                  message="Manual 'Update Analysis' triggered by user.")
-        return jsonify({"success": True, "result": result})
+        with pipeline.lock:
+            n = pipeline.rebuild_hyper()
+            pipeline.log("manual_sync", "success", n, "Manual re-sync: .hyper rebuilt from the Excel file.")
+        return jsonify({"success": True, "records": n})
     except Exception as e:
-        log_sync("manual_sync", "error", message=str(e))
+        pipeline.log("manual_sync", "error", 0, str(e))
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/sync-log")
 def api_sync_log():
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT * FROM sync_log ORDER BY id DESC LIMIT 100"
-    ).fetchall()
-    conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(pipeline.read_log())
 
 
-# ---------------- Excel export endpoints (spec section 7 & 9) ----------------
-
-@app.route("/export/latest")
-def export_latest():
-    try:
-        path, count = analytics.export_latest_data()
-        log_sync("export", "success", records_synced=count,
-                  message="Bike_Sharing_Export.xlsx generated from current database.")
-        return send_file(path, as_attachment=True, download_name="Bike_Sharing_Export.xlsx")
-    except Exception as e:
-        log_sync("export", "error", message=str(e))
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/export/updated-workbook")
-def export_updated_workbook():
-    try:
-        path, analysis = analytics.generate_updated_analysis_workbook()
-        log_sync("analysis_update", "success",
-                  records_synced=analysis["descriptive"].get("count", 0),
-                  message="Bike_Sharing_Analysis_Updated.xlsx generated (template preserved).")
-        return send_file(path, as_attachment=True, download_name="Bike_Sharing_Analysis_Updated.xlsx")
-    except Exception as e:
-        log_sync("analysis_update", "error", message=str(e))
-        return jsonify({"error": str(e)}), 500
-
-
-# ---------- Tableau Public: data files + saved dashboard URL ----------
-
-def _tableau_export(builder, filename, label):
-    try:
-        path, count = builder()
-        log_sync("export", "success", records_synced=count,
-                  message=f"{filename} generated for Tableau Public ({label}).")
-        return send_file(path, as_attachment=True, download_name=filename)
-    except Exception as e:
-        log_sync("export", "error", message=str(e))
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/export/tableau-csv")
-def export_tableau_csv():
-    return _tableau_export(analytics.export_tableau_csv, "Bike_Sharing_Tableau_Data.csv", "CSV")
-
-
-@app.route("/export/tableau-xlsx")
-def export_tableau_xlsx():
-    return _tableau_export(analytics.export_tableau_xlsx, "Bike_Sharing_Tableau_Data.xlsx", "Excel")
-
-
-@app.route("/api/tableau-url")
-def api_get_tableau_url():
-    conn = get_conn()
-    row = conn.execute("SELECT value FROM settings WHERE key='tableau_url'").fetchone()
-    conn.close()
-    if row:
-        return jsonify({"url": row["value"], "is_default": False})
-    return jsonify({"url": DEFAULT_TABLEAU_URL, "is_default": True})
-
-
-@app.route("/api/tableau-url", methods=["POST"])
-def api_set_tableau_url():
-    data = request.get_json(force=True) or {}
-    url = str(data.get("url", "")).strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        return jsonify({"error": "Please enter a valid URL starting with https://"}), 400
-    conn = get_conn()
-    conn.execute("INSERT INTO settings (key, value) VALUES ('tableau_url', ?) "
-                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (url,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True, "url": url})
-
-
-# ---------- Dashboard pipeline: Excel -> .hyper -> .twb ----------
-
-TABLEAU_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "tableau")
-
-
-@app.route("/api/tableau/refresh", methods=["POST"])
-def api_tableau_refresh():
-    result = refresh_tableau_files("Manual refresh")
-    if "error" in result:
-        return jsonify({"success": False, "error": result["error"]}), 500
-    return jsonify({"success": True, **result})
-
-
-@app.route("/api/tableau/status")
-def api_tableau_status():
-    conn = get_conn()
-    last = conn.execute(
-        "SELECT event_time, status, records_synced, message FROM sync_log "
-        "WHERE event_type='tableau_sync' ORDER BY id DESC LIMIT 1").fetchone()
-    conn.close()
-    files = {}
-    for key, name in (("hyper", "Bike_Sharing.hyper"), ("twb", "Project_data_Analysis.twb"),
-                      ("twbx", "Project_data_Analysis.twbx")):
-        path = os.path.join(TABLEAU_DIR, name)
-        files[key] = {"name": name, "exists": os.path.exists(path),
-                      "modified": datetime.datetime.fromtimestamp(os.path.getmtime(path)).isoformat(timespec="seconds")
-                      if os.path.exists(path) else None}
-    return jsonify({"last_run": dict(last) if last else None, "files": files})
-
-
-@app.route("/export/tableau-workbook")
-def export_tableau_workbook():
-    path = os.path.join(TABLEAU_DIR, "Project_data_Analysis.twbx")
-    if not os.path.exists(path):
-        refresh_tableau_files("Download requested")
-    return send_file(path, as_attachment=True, download_name="Project_data_Analysis.twbx")
-
-
-@app.route("/export/tableau-hyper")
-def export_tableau_hyper():
-    path = os.path.join(TABLEAU_DIR, "Bike_Sharing.hyper")
-    if not os.path.exists(path):
-        refresh_tableau_files("Download requested")
-    return send_file(path, as_attachment=True, download_name="Bike_Sharing.hyper")
+@app.route("/export/workbook")
+def export_workbook():
+    return send_file(datastore.EXCEL_PATH, as_attachment=True,
+                     download_name="Bike_Sharing_Analysis_Final.xlsx")
 
 
 if __name__ == "__main__":

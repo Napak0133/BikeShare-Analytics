@@ -4,8 +4,6 @@
 <div class="flex-between">
   <h1 data-i18n="data_title">Data Management</h1>
   <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end">
-    <a class="btn outline" href="/export/tableau-csv" data-i18n="btn_tableau_csv" data-i18n-title="tt_tableau_export">⬇ Export Data for Tableau (CSV)</a>
-    <a class="btn outline" href="/export/tableau-xlsx" data-i18n="btn_tableau_xlsx" data-i18n-title="tt_tableau_export">⬇ Export Data for Tableau (Excel)</a>
     <a href="/data/add" class="btn secondary" data-i18n="btn_add">+ Add Record</a>
   </div>
 </div>
@@ -164,13 +162,15 @@ document.getElementById("cancelDelete").onclick = () => {
 
 document.getElementById("confirmDelete").onclick = async () => {
   try {
-    await apiSend(`/api/records/${pendingDeleteId}`, "DELETE");
+    const res = await apiSend(`/api/records/${pendingDeleteId}`, "DELETE");
     document.getElementById("confirmModal").classList.remove("show");
-    showAlert(t("msg_deleted"), "success");
+    if (res.warning) showAlert(res.warning, "error"); else showAlert(t("msg_deleted"), "success");
+    notifyDataChanged();
+    populateYears();
     loadTable();
   } catch (e) {
     document.getElementById("confirmModal").classList.remove("show");
-    showAlert(t("err_delete_protected"), "error");
+    showAlert(e.message || t("err_delete_protected"), "error");
   }
 };
 

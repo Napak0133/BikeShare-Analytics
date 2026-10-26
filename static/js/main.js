@@ -27,3 +27,10 @@ async function apiSend(url, method, body) {
 function fmtNumber(n) {
   return Number(n).toLocaleString();
 }
+
+// Tells other open pages of this browser (e.g. the Dashboard) that records changed, so their charts
+// refresh immediately instead of waiting for the next 2-second check.
+window.dataChannel = ("BroadcastChannel" in window) ? new BroadcastChannel("bikeshare-data") : null;
+function notifyDataChanged() {
+  try { if (window.dataChannel) window.dataChannel.postMessage("changed"); } catch (e) {}
+}

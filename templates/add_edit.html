@@ -133,11 +133,13 @@ document.getElementById("recordForm").addEventListener("submit", async (e) => {
   };
   try {
     if (editId) {
-      await apiSend(`/api/records/${editId}`, "PUT", payload);
-      showAlert(t("msg_updated"), "success");
+      const res = await apiSend(`/api/records/${editId}`, "PUT", payload);
+      notifyDataChanged();
+      if (res.warning) showAlert(res.warning, "error"); else showAlert(t("msg_updated"), "success");
     } else {
-      await apiSend("/api/records", "POST", payload);
-      showAlert(t("msg_added"), "success");
+      const res = await apiSend("/api/records", "POST", payload);
+      notifyDataChanged();
+      if (res.warning) showAlert(res.warning, "error"); else showAlert(t("msg_added", { id: res.id }), "success");
       document.getElementById("recordForm").reset();
       recalcTotal();
     }
